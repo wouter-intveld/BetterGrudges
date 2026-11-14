@@ -97,7 +97,8 @@ end
 
 -- Colours: bright for chat and tooltips, ink for the book's parchment.
 local CHAT = { grudge = "ffff5050", kind = "ff50ff50", settled = "ff999999" }
-local INK = { grudge = "ff8a1008", kind = "ff145214", settled = "ff6e5e4a", plain = "ff2e2014" }
+-- On parchment only a short tag carries the colour; the text stays dark ink.
+local INK = { grudge = "ff8a1008", kind = "ff0b4210", settled = "ff6e5e4a", plain = "ff140c06", kindCount = "ff140c06" }
 
 local function Summary(p, colours)
     colours = colours or CHAT
@@ -105,17 +106,18 @@ local function Summary(p, colours)
     local parts = {}
     if open > 0 then parts[#parts + 1] = ("|c%s%d grudge%s|r"):format(colours.grudge, open, open == 1 and "" or "s") end
     if settled > 0 then parts[#parts + 1] = ("|c%s%d settled|r"):format(colours.settled, settled) end
-    if kindness > 0 then parts[#parts + 1] = ("|c%s%d kindness%s|r"):format(colours.kind, kindness, kindness == 1 and "" or "es") end
+    if kindness > 0 then parts[#parts + 1] = ("|c%s%d kindness%s|r"):format(colours.kindCount or colours.kind, kindness, kindness == 1 and "" or "es") end
     return #parts > 0 and table.concat(parts, ", ") or nil
 end
 
 -- One entry as a coloured line: open grudges red, kindnesses green, settled grey.
-local function EntryLine(e, colours)
+local function EntryLine(e)
     local line = date("%Y-%m-%d", e.t) .. "  " .. Describe(e)
-    if e.done then return "|c" .. colours.settled .. line .. " [settled]|r" end
-    if KIND[e.k].grudge then return "|c" .. colours.grudge .. line .. "|r" end
-    if KIND[e.k].kind then return "|c" .. colours.kind .. line .. "|r" end
-    return colours.plain and ("|c" .. colours.plain .. line .. "|r") or line
+    if e.done then return "|c" .. INK.settled .. line .. " [settled]|r" end
+    local def = KIND[e.k]
+    local tag = def.grudge and ("|c" .. INK.grudge .. "Grudge:|r ")
+        or def.kind and ("|c" .. INK.kind .. "Kindness:|r ") or ""
+    return ("|c%s%s|r  %s|c%s%s|r"):format(INK.plain, date("%Y-%m-%d", e.t), tag, INK.plain, Describe(e))
 end
 
 -- Everyone in the book whose name contains filter: open grudges first, then
@@ -500,7 +502,7 @@ local function ClassColour(class)
 end
 
 local function Ink(fs)
-    fs:SetTextColor(0.18, 0.125, 0.08)
+    fs:SetTextColor(0.08, 0.05, 0.02) -- near black, as the spellbook's text
     fs:SetShadowOffset(0, 0)
     return fs
 end
@@ -533,7 +535,7 @@ local function ListRow(i)
     row.class:SetPoint("TOPLEFT", 2, -4)
     row.class:SetPoint("BOTTOMLEFT", 2, 4)
     row.class:SetWidth(3)
-    row.name = Ink(row:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
+    row.name = Ink(row:CreateFontString(nil, "OVERLAY", "GameFontHighlightMedium"))
     row.name:SetPoint("TOPLEFT", 10, -3)
     row.name:SetPoint("RIGHT", -4, 0)
     row.name:SetJustifyH("LEFT")
@@ -552,7 +554,7 @@ end
 local function PageLine(i)
     local fs = ui.lines[i]
     if not fs then
-        fs = Ink(ui.pageContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
+        fs = Ink(ui.pageContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightMedium"))
         fs:SetWidth(PAGE_W - 10)
         fs:SetJustifyH("LEFT")
         ui.lines[i] = fs
@@ -578,19 +580,23 @@ local function CreateBook()
     if f.SetTitle then f:SetTitle(TITLE .. ": the book") end
     if f.SetPortraitToAsset then f:SetPortraitToAsset("Interface\\Icons\\INV_Misc_Book_09") end
     local paper = f:CreateTexture(nil, "BACKGROUND", nil, 2)
-    paper:SetTexture("Interface\\AchievementFrame\\UI-Achievement-Parchment-Horizontal")
-    paper:SetDesaturated(true) -- the texture is a strong orange
-    -- A tint can only darken, so a warm layer added on top lightens it to cream.
-    local light = f:CreateTexture(nil, "BACKGROUND", nil, 3)
-    light:SetColorTexture(0.34, 0.29, 0.18)
-    light:SetBlendMode("ADD")
-    for _, tex in ipairs({ paper, light }) do
-        if f.Bg then
-            tex:SetAllPoints(f.Bg)
-        else
-            tex:SetPoint("TOPLEFT", 8, -24)
-            tex:SetPoint("BOTTOMRIGHT", -6, 6)
-        end
+    local textures = { paper }
+    if C_Texture.GetAtlasInfo("spellbook-Page-Right-C60") then
+        paper:SetAtlas("spellbook-Page-Right-C60") -- the spellbook's own page
+    else
+        paper:SetTexture("Interface\\AchievementFrame\\UI-Achievement-Parchment-Horizontal")
+        paper:SetDesaturated(true) -- the texture is a strong orange
+        -- A tint can only darken, so a warm layer added on top lightens it to cream.
+        local light = f:CreateTexture(nil, "BACKGROUND", nil, 3)
+        light:SetColorTexture(0.34, 0.29, 0.18)
+        light:SetBlendMode("ADD")
+        textures[2] = light
+    end
+    -- Up under the title bar: the page's curled top edge would leave a dark
+    -- strip there otherwise. The frame's border draws over it.
+    for _, tex in ipairs(textures) do
+        tex:SetPoint("TOPLEFT", 4, -2)
+        tex:SetPoint("BOTTOMRIGHT", -4, 4)
     end
     ui = { frame = f, rows = {}, lines = {}, buttons = {} }
 
@@ -631,18 +637,18 @@ local function CreateBook()
     local split = f:CreateTexture(nil, "ARTWORK")
     split:SetColorTexture(0.35, 0.22, 0.1, 0.5)
     split:SetWidth(1)
-    split:SetPoint("TOPLEFT", LIST_W + 20, -44) -- clear of the title bar
+    split:SetPoint("TOPLEFT", LIST_W + 20, -50) -- clear of the title bar
     split:SetPoint("BOTTOMLEFT", LIST_W + 20, 16)
 
     local x = LIST_W + 32
-    ui.name = Ink(f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"))
-    ui.name:SetPoint("TOPLEFT", x, -34)
-    ui.sub = Ink(f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
+    ui.name = Ink(f:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge"))
+    ui.name:SetPoint("TOPLEFT", x, -46)
+    ui.sub = Ink(f:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
     ui.sub:SetPoint("TOPLEFT", ui.name, "BOTTOMLEFT", 0, -4)
 
     local page
     page, ui.pageContent = Scroller(f, PAGE_W)
-    page:SetPoint("TOPLEFT", x, -76)
+    page:SetPoint("TOPLEFT", x, -88)
     page:SetPoint("BOTTOMRIGHT", -14, 44)
     ui.page = page
 
@@ -698,13 +704,13 @@ RefreshBook = function()
     ui.forgive:SetEnabled((Counts(p)) > 0)
     ui.name:SetText(selected)
     local class = p.class and (p.class:sub(1, 1) .. p.class:sub(2):lower() .. ", ") or ""
-    ui.sub:SetText(class .. (Summary(p, INK) or "notes only") .. (p.seen and (", last met " .. date("%Y-%m-%d", p.seen)) or ""))
+    ui.sub:SetText(class .. (Summary(p, INK) or (#p.entries > 0 and "notes only" or "empty page")) .. (p.seen and (", last met " .. date("%Y-%m-%d", p.seen)) or ""))
 
     -- Newest first: what happened last is what you want to know.
     local y = 0
     for i = #p.entries, 1, -1 do
         local fs = PageLine(#p.entries - i + 1)
-        fs:SetText(EntryLine(p.entries[i], INK))
+        fs:SetText(EntryLine(p.entries[i]))
         fs:SetPoint("TOPLEFT", 0, -y)
         fs:Show()
         y = y + fs:GetStringHeight() + 6
