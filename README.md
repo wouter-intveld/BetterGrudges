@@ -46,7 +46,8 @@ Open it with `/grudge` or the minimap button.
 ## Writing your own
 
 Right-click a player (their portrait, a nameplate, a party or raid frame, or
-their name in chat) and choose **Add to the book**. A grudge comes with
+their name in chat) and choose **Add to the book**. For a player already in the
+book the menu also has **Open their page**. A grudge comes with
 ready-made reasons, one click each: rude, ninja looter, stole my objective,
 tagged my mob, ganked me, left the group. Or write your own.
 

@@ -537,6 +537,10 @@ local function AddMenuEntry(_, root, context)
     end
     if not name then return end
     root:CreateDivider()
+    local key = Ambiguate(name, "none")
+    if Book()[key] then
+        root:CreateButton("Open their page", function() ShowBook(key) end)
+    end
     local book = root:CreateButton("Add to the book")
     for _, choice in ipairs(CHOICES) do
         if choice.reasons then
