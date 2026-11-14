@@ -3,3 +3,4 @@ package-as: BetterGrudges
 ignore:
   - .luarc.json
   - .github
+  - art

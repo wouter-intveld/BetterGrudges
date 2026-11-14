@@ -4,6 +4,7 @@
 ## Notes: A friendly book of grudges: who killed you, who bested you in a duel, who rezzed and buffed you.
 ## Author: deface
 ## Version: @project-version@
+## IconTexture: Interface\AddOns\BetterGrudges\icon
 ## SavedVariables: BetterGrudgesDB
 
 BetterGrudges.lua
