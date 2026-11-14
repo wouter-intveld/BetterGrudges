@@ -38,6 +38,18 @@ local function Print(msg)
     print(TITLE .. ": " .. msg)
 end
 
+-- This client hides some values from addons, often in combat ("secret"
+-- values): reading or testing one is an error, so check before using them.
+local issecret = issecretvalue or function() return false end
+
+-- A unit's name as the book keys it ("Name", or "Name-Realm" for another
+-- realm), or nil when the game hides it.
+local function UnitBookName(unit)
+    local name = GetUnitName(unit, true)
+    if not name or issecret(name) then return nil end
+    return Ambiguate(name, "none")
+end
+
 local function Notify(msg)
     if not db.quiet then Print(msg) end
 end
@@ -184,9 +196,10 @@ local function OnPlayerDead()
         if not (UnitExists(unit) and UnitIsUnit(unit .. "target", "player") and UnitCanAttack("player", unit)) then return end
         if UnitIsPlayer(unit) then
             local guid = UnitGUID(unit)
-            if guid and not seen[guid] then
+            local name = UnitBookName(unit)
+            if name and guid and not issecret(guid) and not seen[guid] then
                 seen[guid] = true
-                killers[#killers + 1] = { name = GetUnitName(unit, true), guid = guid }
+                killers[#killers + 1] = { name = name, guid = guid }
             end
         else
             busy = true
@@ -201,12 +214,14 @@ end
 -- Buffs other players put on you, in the open world only and once a day per
 -- player: cities and dungeons would fill the book.
 local function OnPlayerAura(_, info)
-    if not (info and info.addedAuras) or IsInInstance() then return end
+    if not info or issecret(info.addedAuras) or not info.addedAuras or IsInInstance() then return end
     for _, aura in ipairs(info.addedAuras) do
         local src = aura.sourceUnit
-        if aura.isHelpful and src and UnitIsPlayer(src) and not UnitIsUnit(src, "player")
-            and not UnitCanAttack("player", src) then
-            local name, guid = Ambiguate(GetUnitName(src, true), "none"), UnitGUID(src)
+        local readable = not (issecret(src) or issecret(aura.isHelpful) or issecret(aura.name))
+        local name = readable and aura.isHelpful and src and UnitIsPlayer(src) and not UnitIsUnit(src, "player")
+            and not UnitCanAttack("player", src) and UnitBookName(src)
+        if name then
+            local guid = UnitGUID(src)
             local p = Record(name, guid)
             local today = date("%Y-%m-%d")
             if p.buffDay ~= today then
@@ -235,6 +250,7 @@ for _, fmt in ipairs({ COMBATLOG_HONORGAIN, COMBATLOG_HONORGAIN_NO_RANK }) do
 end
 
 local function OnHonorGain(msg)
+    if issecret(msg) then return end
     for _, h in ipairs(HONOR_PATTERNS) do
         local caps = { msg:match(h[1]) }
         if caps[1] then
@@ -257,6 +273,7 @@ for _, fmt in ipairs({ DUEL_WINNER_KNOCKOUT, DUEL_WINNER_RETREAT }) do
 end
 
 local function OnSystemMessage(msg)
+    if issecret(msg) then return end
     for _, d in ipairs(DUEL_PATTERNS) do
         local caps = { msg:match(d.pat) }
         if caps[1] then
@@ -276,7 +293,7 @@ local function OnSystemMessage(msg)
 end
 
 local function OnResurrectRequest(name)
-    if not name or (lastRez[name] and GetTime() - lastRez[name] < 60) then return end
+    if not name or issecret(name) or (lastRez[name] and GetTime() - lastRez[name] < 60) then return end
     lastRez[name] = GetTime()
     Add(name, nil, "rez")
     Notify(name .. " offered you a resurrection. You owe them one.")
@@ -288,8 +305,8 @@ end
 local function OnUnitTooltip(tooltip)
     local _, unit = tooltip:GetUnit()
     if not (unit and UnitIsPlayer(unit)) or UnitIsUnit(unit, "player") then return end
-    local name = Ambiguate(GetUnitName(unit, true), "none")
-    local p = Book()[name]
+    local name = UnitBookName(unit)
+    local p = name and Book()[name]
     if p and not p.race then Record(name, UnitGUID(unit)) end -- added by name: learn race and class now
     local summary = p and Summary(p)
     if summary then tooltip:AddLine("Grudges: " .. summary) end
@@ -301,7 +318,7 @@ end
 -- A name typed in any case, or "target", to the key it has in the book.
 local function FindName(arg)
     if arg:lower() == "target" then
-        if UnitIsPlayer("target") then return Ambiguate(GetUnitName("target", true), "none"), UnitGUID("target") end
+        if UnitIsPlayer("target") and UnitBookName("target") then return UnitBookName("target"), UnitGUID("target") end
         return nil
     end
     local lower = arg:lower()
@@ -444,7 +461,7 @@ StaticPopupDialogs.BETTERGRUDGES_NEW = {
     OnShow = function(self)
         local box = self.EditBox or self.editBox
         if UnitIsPlayer("target") and not UnitIsUnit("target", "player") then
-            box:SetText(Ambiguate(GetUnitName("target", true), "none"))
+            box:SetText(UnitBookName("target") or "")
             box:HighlightText()
         end
     end,
@@ -453,7 +470,7 @@ StaticPopupDialogs.BETTERGRUDGES_NEW = {
         if text == "" then return end
         local name, guid = FindName(text)
         if not name then return end
-        if not guid and UnitIsPlayer("target") and Ambiguate(GetUnitName("target", true), "none") == name then
+        if not guid and UnitIsPlayer("target") and UnitBookName("target") == name then
             guid = UnitGUID("target")
         end
         Record(name, guid)
@@ -513,7 +530,7 @@ local function AddMenuEntry(_, root, context)
     local unit = context and context.unit
     local name, guid
     if unit and UnitIsPlayer(unit) and not UnitIsUnit(unit, "player") then
-        name, guid = GetUnitName(unit, true), UnitGUID(unit)
+        name, guid = UnitBookName(unit), UnitGUID(unit)
     elseif context and context.name and not unit then
         name = context.server and context.server ~= "" and (context.name .. "-" .. context.server) or context.name
     end
@@ -568,7 +585,8 @@ end
 
 local function MarkState(unit)
     if not (UnitExists(unit) and UnitIsPlayer(unit)) or UnitIsUnit(unit, "player") then return nil end
-    local p = Book()[Ambiguate(GetUnitName(unit, true), "none")]
+    local name = UnitBookName(unit)
+    local p = name and Book()[name]
     if not p then return nil end
     local open, _, kindness = Counts(p)
     -- A grudge outranks a kindness; with grudge marks off, a kindness still shows.

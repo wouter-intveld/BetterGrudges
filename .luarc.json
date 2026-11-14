@@ -31,7 +31,8 @@
     "Settings",
     "SettingsPanel",
     "CreateSettingsListSectionHeaderInitializer",
-    "MinimalSliderWithSteppersMixin"
+    "MinimalSliderWithSteppersMixin",
+    "issecretvalue"
   ],
   "workspace.ignoreDir": [
     "Libs"
