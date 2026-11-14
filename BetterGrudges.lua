@@ -17,15 +17,8 @@ local KIND = {
     note = { text = "%s" },
 }
 
--- Combat log flags.
-local TYPE_PLAYER, TYPE_NPC, HOSTILE = 0x400, 0x800, 0x40
-local KILLER_WINDOW = 10 -- seconds: a player hit you this recently, so your death is theirs
-local BUSY_WINDOW = 6    -- seconds: you were trading blows with a creature
-
 local db
-local me, myName -- player GUID and name, set at login
-local lastAttacker, lastAttackerGUID, lastAttackTime = nil, nil, 0
-local lastPveTime = 0
+local myName -- set at login
 local lastRez = {} -- name -> time, so a recast isn't noted twice
 
 local function Print(msg)
@@ -108,63 +101,86 @@ local function Summary(p)
 end
 
 ---------------------------------------------------------------------------
--- Recording
+-- Recording. This client keeps the combat log from addons, so everything
+-- here comes from unit state, your own buffs and chat messages.
 ---------------------------------------------------------------------------
-local function OnCombatLog()
-    local _, sub, _, srcGUID, srcName, srcFlags, _, dstGUID, dstName, dstFlags, _, _, spellName, _, auraType =
-        CombatLogGetCurrentEventInfo()
-    if srcGUID ~= me and dstGUID ~= me then return end -- most of the log: not about you
 
-    local srcPlayer = bit.band(srcFlags, TYPE_PLAYER) > 0
-    if dstGUID == me and srcGUID ~= me then
-        if sub:sub(-7) == "_DAMAGE" then
-            if srcPlayer and bit.band(srcFlags, HOSTILE) > 0 then
-                lastAttacker, lastAttackerGUID, lastAttackTime = srcName, srcGUID, GetTime()
-            elseif bit.band(srcFlags, TYPE_NPC) > 0 then
-                lastPveTime = GetTime()
+-- Units that can be checked by name: what you're looking at, and every nameplate.
+local function EachUnit(fn)
+    for _, unit in ipairs({ "target", "focus", "mouseover" }) do fn(unit) end
+    for i = 1, 40 do fn("nameplate" .. i) end
+end
+
+-- Your killer is the hostile player who had you targeted when you died; a
+-- creature with you targeted too means you were busy with it.
+local function OnPlayerDead()
+    local killers, seen, busy = {}, {}, nil
+    EachUnit(function(unit)
+        if not (UnitExists(unit) and UnitIsUnit(unit .. "target", "player") and UnitCanAttack("player", unit)) then return end
+        if UnitIsPlayer(unit) then
+            local guid = UnitGUID(unit)
+            if guid and not seen[guid] then
+                seen[guid] = true
+                killers[#killers + 1] = { name = GetUnitName(unit, true), guid = guid }
             end
-        elseif sub == "SPELL_AURA_APPLIED" and auraType == "BUFF" and srcPlayer and srcName
-            and bit.band(srcFlags, HOSTILE) == 0 and not IsInInstance() then
-            -- Open world only, and once a day per player: cities would fill the book.
-            local p = Record(Ambiguate(srcName, "none"), srcGUID)
-            local today = date("%Y-%m-%d")
-            if p.buffDay ~= today then
-                p.buffDay = today
-                Add(srcName, srcGUID, "buff", { s = spellName })
-            end
+        else
+            busy = true
         end
-    elseif srcGUID == me then
-        if sub == "PARTY_KILL" and dstName and bit.band(dstFlags, TYPE_PLAYER) > 0
-            and bit.band(dstFlags, HOSTILE) > 0 then
-            local _, e = Add(dstName, dstGUID, "killedThem")
-            if e.avenged then Notify(dstName .. ": grudge avenged!") end
-        elseif sub:sub(-7) == "_DAMAGE" and bit.band(dstFlags, TYPE_NPC) > 0 then
-            lastPveTime = GetTime()
-        end
+    end)
+    for _, k in ipairs(killers) do
+        local p = Add(k.name, k.guid, "killedMe", { busy = busy })
+        Notify(("%s killed you. Noted in the book (%s)."):format(k.name, Summary(p)))
     end
 end
 
-local function OnPlayerDead()
-    if lastAttacker and GetTime() - lastAttackTime <= KILLER_WINDOW then
-        local busy = lastPveTime >= lastAttackTime - BUSY_WINDOW or nil
-        local p = Add(lastAttacker, lastAttackerGUID, "killedMe", { busy = busy })
-        Notify(("%s killed you. Noted in the book (%s)."):format(lastAttacker, Summary(p)))
+-- Buffs other players put on you, in the open world only and once a day per
+-- player: cities and dungeons would fill the book.
+local function OnPlayerAura(_, info)
+    if not (info and info.addedAuras) or IsInInstance() then return end
+    for _, aura in ipairs(info.addedAuras) do
+        local src = aura.sourceUnit
+        if aura.isHelpful and src and UnitIsPlayer(src) and not UnitIsUnit(src, "player")
+            and not UnitCanAttack("player", src) then
+            local name, guid = Ambiguate(GetUnitName(src, true), "none"), UnitGUID(src)
+            local p = Record(name, guid)
+            local today = date("%Y-%m-%d")
+            if p.buffDay ~= today then
+                p.buffDay = today
+                Add(name, guid, "buff", { s = aura.name })
+            end
+        end
     end
-    lastAttacker = nil
 end
 
 -- "%1$s has defeated %2$s in a duel" -> a pattern, and which argument each capture is.
 local function GlobalPattern(fmt)
     local order = {}
-    local pat = fmt:gsub("%%(%d)%$s", function(n)
-        order[#order + 1] = tonumber(n)
-        return "\0"
-    end):gsub("%%s", function()
-        order[#order + 1] = #order + 1
+    local pat = fmt:gsub("%%(%d*)%$?[sd]", function(n)
+        order[#order + 1] = n ~= "" and tonumber(n) or #order + 1
         return "\0"
     end)
     pat = pat:gsub("[%(%)%.%+%-%*%?%[%]%^%$]", "%%%0"):gsub("%z", "(.+)")
     return "^" .. pat .. "$", order
+end
+
+-- "Name dies, honorable kill Rank: ...": a player you or your group killed.
+local HONOR_PATTERNS = {}
+for _, fmt in ipairs({ COMBATLOG_HONORGAIN, COMBATLOG_HONORGAIN_NO_RANK }) do
+    if fmt then HONOR_PATTERNS[#HONOR_PATTERNS + 1] = { GlobalPattern(fmt) } end
+end
+
+local function OnHonorGain(msg)
+    for _, h in ipairs(HONOR_PATTERNS) do
+        local caps = { msg:match(h[1]) }
+        if caps[1] then
+            local args = {}
+            for i, n in ipairs(h[2]) do args[n] = caps[i] end
+            local victim = args[1]
+            local _, e = Add(victim, nil, "killedThem")
+            if e.avenged then Notify(victim .. ": grudge avenged!") end
+            return
+        end
+    end
 end
 
 local DUEL_PATTERNS = {}
@@ -308,7 +324,8 @@ end
 -- Events
 ---------------------------------------------------------------------------
 local handlers = {
-    COMBAT_LOG_EVENT_UNFILTERED = OnCombatLog,
+    UNIT_AURA = OnPlayerAura,
+    CHAT_MSG_COMBAT_HONOR_GAIN = OnHonorGain,
     PLAYER_DEAD = OnPlayerDead,
     CHAT_MSG_SYSTEM = OnSystemMessage,
     RESURRECT_REQUEST = OnResurrectRequest,
@@ -325,8 +342,10 @@ frame:SetScript("OnEvent", function(_, event, ...)
         for key, value in pairs(DEFAULTS) do
             if db[key] == nil then db[key] = type(value) == "table" and CopyTable(value) or value end
         end
-        me, myName = UnitGUID("player"), UnitName("player")
-        for name in pairs(handlers) do frame:RegisterEvent(name) end
+        myName = UnitName("player")
+        for name in pairs(handlers) do
+            if name == "UNIT_AURA" then frame:RegisterUnitEvent(name, "player") else frame:RegisterEvent(name) end
+        end
         TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, OnUnitTooltip)
         return
     end

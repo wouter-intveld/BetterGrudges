@@ -13,7 +13,8 @@
     "TooltipDataProcessor",
     "DUEL_WINNER_KNOCKOUT",
     "DUEL_WINNER_RETREAT",
-    "CombatLogGetCurrentEventInfo",
-    "GetUnitName"
+    "GetUnitName",
+    "COMBATLOG_HONORGAIN",
+    "COMBATLOG_HONORGAIN_NO_RANK"
   ]
 }
