@@ -6,6 +6,7 @@
 ## Version: @project-version@
 ## IconTexture: Interface\AddOns\BetterGrudges\icon
 ## SavedVariables: BetterGrudgesDB
+## X-Curse-Project-ID: 1804491
 
 embeds.xml
 BetterGrudges.lua
