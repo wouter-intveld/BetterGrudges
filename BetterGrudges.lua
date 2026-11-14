@@ -95,31 +95,36 @@ local function Counts(p)
     return open, settled, kindness
 end
 
-local function Summary(p)
+-- Colours: bright for chat and tooltips, ink for the book's parchment.
+local CHAT = { grudge = "ffff5050", kind = "ff50ff50", settled = "ff999999" }
+local INK = { grudge = "ff8a1008", kind = "ff145214", settled = "ff6e5e4a", plain = "ff2e2014" }
+
+local function Summary(p, colours)
+    colours = colours or CHAT
     local open, settled, kindness = Counts(p)
     local parts = {}
-    if open > 0 then parts[#parts + 1] = ("|cffff5050%d grudge%s|r"):format(open, open == 1 and "" or "s") end
-    if settled > 0 then parts[#parts + 1] = ("|cff999999%d settled|r"):format(settled) end
-    if kindness > 0 then parts[#parts + 1] = ("|cff50ff50%d kindness%s|r"):format(kindness, kindness == 1 and "" or "es") end
+    if open > 0 then parts[#parts + 1] = ("|c%s%d grudge%s|r"):format(colours.grudge, open, open == 1 and "" or "s") end
+    if settled > 0 then parts[#parts + 1] = ("|c%s%d settled|r"):format(colours.settled, settled) end
+    if kindness > 0 then parts[#parts + 1] = ("|c%s%d kindness%s|r"):format(colours.kind, kindness, kindness == 1 and "" or "es") end
     return #parts > 0 and table.concat(parts, ", ") or nil
 end
 
 -- One entry as a coloured line: open grudges red, kindnesses green, settled grey.
-local function EntryLine(e)
+local function EntryLine(e, colours)
     local line = date("%Y-%m-%d", e.t) .. "  " .. Describe(e)
-    if e.done then return "|cff999999" .. line .. " [settled]|r" end
-    if KIND[e.k].grudge then return "|cffff5050" .. line .. "|r" end
-    if KIND[e.k].kind then return "|cff50ff50" .. line .. "|r" end
-    return line
+    if e.done then return "|c" .. colours.settled .. line .. " [settled]|r" end
+    if KIND[e.k].grudge then return "|c" .. colours.grudge .. line .. "|r" end
+    if KIND[e.k].kind then return "|c" .. colours.kind .. line .. "|r" end
+    return colours.plain and ("|c" .. colours.plain .. line .. "|r") or line
 end
 
 -- Everyone in the book whose name contains filter: open grudges first, then
 -- the most recently met.
-local function SortedPages(filter)
+local function SortedPages(filter, colours)
     local list = {}
     for name, p in pairs(Book()) do
         if filter == "" or name:lower():find(filter, 1, true) then
-            local summary = Summary(p) or (#p.entries > 0 and "notes" or "empty page")
+            local summary = Summary(p, colours) or (#p.entries > 0 and "notes" or "empty page")
             list[#list + 1] = { name = name, open = (Counts(p)), seen = p.seen or 0, summary = summary }
         end
     end
@@ -487,9 +492,17 @@ end
 local ROW_H, LIST_W, PAGE_W = 32, 190, 400
 local ui, selected
 
+-- Class colour for the bar beside a name: text in it doesn't read on parchment.
 local function ClassColour(class)
     local c = class and RAID_CLASS_COLORS[class]
-    return c and c.colorStr or "ffffffff"
+    if c then return c.r, c.g, c.b, 1 end
+    return 0, 0, 0, 0
+end
+
+local function Ink(fs)
+    fs:SetTextColor(0.18, 0.125, 0.08)
+    fs:SetShadowOffset(0, 0)
+    return fs
 end
 
 -- A scroll frame that scrolls with the mouse wheel, and its content frame.
@@ -515,12 +528,16 @@ local function ListRow(i)
     row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
     row.selected = row:CreateTexture(nil, "BACKGROUND")
     row.selected:SetAllPoints()
-    row.selected:SetColorTexture(1, 0.82, 0, 0.15)
-    row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    row.name:SetPoint("TOPLEFT", 6, -3)
+    row.selected:SetColorTexture(0.45, 0.28, 0.1, 0.2)
+    row.class = row:CreateTexture(nil, "ARTWORK")
+    row.class:SetPoint("TOPLEFT", 2, -4)
+    row.class:SetPoint("BOTTOMLEFT", 2, 4)
+    row.class:SetWidth(3)
+    row.name = Ink(row:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
+    row.name:SetPoint("TOPLEFT", 10, -3)
     row.name:SetPoint("RIGHT", -4, 0)
     row.name:SetJustifyH("LEFT")
-    row.tally = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    row.tally = Ink(row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
     row.tally:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
     row.tally:SetPoint("RIGHT", -4, 0)
     row.tally:SetJustifyH("LEFT")
@@ -535,7 +552,7 @@ end
 local function PageLine(i)
     local fs = ui.lines[i]
     if not fs then
-        fs = ui.pageContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        fs = Ink(ui.pageContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
         fs:SetWidth(PAGE_W - 10)
         fs:SetJustifyH("LEFT")
         ui.lines[i] = fs
@@ -560,6 +577,21 @@ local function CreateBook()
     tinsert(UISpecialFrames, "BetterGrudgesBook") -- Escape closes it
     if f.SetTitle then f:SetTitle(TITLE .. ": the book") end
     if f.SetPortraitToAsset then f:SetPortraitToAsset("Interface\\Icons\\INV_Misc_Book_09") end
+    local paper = f:CreateTexture(nil, "BACKGROUND", nil, 2)
+    paper:SetTexture("Interface\\AchievementFrame\\UI-Achievement-Parchment-Horizontal")
+    paper:SetDesaturated(true) -- the texture is a strong orange
+    -- A tint can only darken, so a warm layer added on top lightens it to cream.
+    local light = f:CreateTexture(nil, "BACKGROUND", nil, 3)
+    light:SetColorTexture(0.34, 0.29, 0.18)
+    light:SetBlendMode("ADD")
+    for _, tex in ipairs({ paper, light }) do
+        if f.Bg then
+            tex:SetAllPoints(f.Bg)
+        else
+            tex:SetPoint("TOPLEFT", 8, -24)
+            tex:SetPoint("BOTTOMRIGHT", -6, 6)
+        end
+    end
     ui = { frame = f, rows = {}, lines = {}, buttons = {} }
 
     local search = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
@@ -592,20 +624,20 @@ local function CreateBook()
     list:SetPoint("TOPLEFT", 14, -92)
     list:SetPoint("BOTTOMLEFT", 14, 12)
     list:SetWidth(LIST_W)
-    ui.empty = f:CreateFontString(nil, "OVERLAY", "GameFontDisable")
+    ui.empty = Ink(f:CreateFontString(nil, "OVERLAY", "GameFontDisable"))
     ui.empty:SetPoint("TOP", list, "TOP", 0, -20)
     ui.empty:SetWidth(LIST_W - 20)
 
     local split = f:CreateTexture(nil, "ARTWORK")
-    split:SetColorTexture(1, 0.82, 0, 0.25)
+    split:SetColorTexture(0.35, 0.22, 0.1, 0.5)
     split:SetWidth(1)
-    split:SetPoint("TOPLEFT", LIST_W + 20, -32)
-    split:SetPoint("BOTTOMLEFT", LIST_W + 20, 12)
+    split:SetPoint("TOPLEFT", LIST_W + 20, -44) -- clear of the title bar
+    split:SetPoint("BOTTOMLEFT", LIST_W + 20, 16)
 
     local x = LIST_W + 32
-    ui.name = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    ui.name = Ink(f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"))
     ui.name:SetPoint("TOPLEFT", x, -34)
-    ui.sub = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    ui.sub = Ink(f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
     ui.sub:SetPoint("TOPLEFT", ui.name, "BOTTOMLEFT", 0, -4)
 
     local page
@@ -638,14 +670,15 @@ end
 RefreshBook = function()
     if not (ui and ui.frame:IsShown()) then return end
     local book = Book()
-    local list = SortedPages(ui.search:GetText():lower())
+    local list = SortedPages(ui.search:GetText():lower(), INK)
     if selected and not book[selected] then selected = nil end
     if not selected and list[1] then selected = list[1].name end
 
     for i, g in ipairs(list) do
         local row = ListRow(i)
         row.player = g.name
-        row.name:SetText("|c" .. ClassColour(book[g.name].class) .. g.name .. "|r")
+        row.name:SetText(g.name)
+        row.class:SetColorTexture(ClassColour(book[g.name].class))
         row.tally:SetText(g.summary)
         row.selected:SetShown(g.name == selected)
         row:Show()
@@ -663,15 +696,15 @@ RefreshBook = function()
         return
     end
     ui.forgive:SetEnabled((Counts(p)) > 0)
-    ui.name:SetText("|c" .. ClassColour(p.class) .. selected .. "|r")
+    ui.name:SetText(selected)
     local class = p.class and (p.class:sub(1, 1) .. p.class:sub(2):lower() .. ", ") or ""
-    ui.sub:SetText(class .. (Summary(p) or "notes only") .. (p.seen and (", last met " .. date("%Y-%m-%d", p.seen)) or ""))
+    ui.sub:SetText(class .. (Summary(p, INK) or "notes only") .. (p.seen and (", last met " .. date("%Y-%m-%d", p.seen)) or ""))
 
     -- Newest first: what happened last is what you want to know.
     local y = 0
     for i = #p.entries, 1, -1 do
         local fs = PageLine(#p.entries - i + 1)
-        fs:SetText(EntryLine(p.entries[i]))
+        fs:SetText(EntryLine(p.entries[i], INK))
         fs:SetPoint("TOPLEFT", 0, -y)
         fs:Show()
         y = y + fs:GetStringHeight() + 6
