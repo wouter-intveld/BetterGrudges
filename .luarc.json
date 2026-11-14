@@ -15,6 +15,11 @@
     "DUEL_WINNER_RETREAT",
     "GetUnitName",
     "COMBATLOG_HONORGAIN",
-    "COMBATLOG_HONORGAIN_NO_RANK"
+    "COMBATLOG_HONORGAIN_NO_RANK",
+    "Menu",
+    "StaticPopupDialogs",
+    "StaticPopup_Show",
+    "ACCEPT",
+    "CANCEL"
   ]
 }

@@ -17,6 +17,11 @@ good and the bad, and reminds you when you see them again.
 Hover over a player and the tooltip shows what you have against them, and what
 you owe them.
 
+## Notes
+
+Right-click a player (their portrait, a nameplate, a party or raid frame, or
+their name in chat) and choose "Add to the book" to write a note on their page.
+
 ## Commands
 
 - `/grudge` lists everyone in the book, open grudges first.

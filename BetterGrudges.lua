@@ -327,6 +327,56 @@ SlashCmdList.BETTERGRUDGES = function(msg)
 end
 
 ---------------------------------------------------------------------------
+-- Right-click menu: "Add to the book" on a player asks for a note.
+---------------------------------------------------------------------------
+StaticPopupDialogs.BETTERGRUDGES_NOTE = {
+    text = "Add to the book: %s",
+    button1 = ACCEPT,
+    button2 = CANCEL,
+    hasEditBox = true,
+    maxLetters = 200,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    OnAccept = function(self, data)
+        local text = (self.EditBox or self.editBox):GetText():match("^%s*(.-)%s*$")
+        if text ~= "" then
+            local p = Add(data.name, data.guid, "note", { s = text })
+            Print(("noted on %s's page (%s)."):format(data.name, Summary(p) or "notes"))
+        end
+    end,
+    EditBoxOnEnterPressed = function(self)
+        local popup = self:GetParent()
+        StaticPopupDialogs.BETTERGRUDGES_NOTE.OnAccept(popup, popup.data)
+        popup:Hide()
+    end,
+    EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
+}
+
+local function AddMenuEntry(_, root, context)
+    local unit = context and context.unit
+    local name, guid
+    if unit and UnitIsPlayer(unit) and not UnitIsUnit(unit, "player") then
+        name, guid = GetUnitName(unit, true), UnitGUID(unit)
+    elseif context and context.name and not unit then
+        name = context.server and context.server ~= "" and (context.name .. "-" .. context.server) or context.name
+    end
+    if not name then return end
+    root:CreateDivider()
+    root:CreateButton("Add to the book", function()
+        StaticPopup_Show("BETTERGRUDGES_NOTE", Ambiguate(name, "none"), nil, { name = name, guid = guid })
+    end)
+end
+
+-- The player menus: unit frames, nameplates, party and raid, and names in chat.
+if Menu and Menu.ModifyMenu then
+    for _, tag in ipairs({ "MENU_UNIT_PLAYER", "MENU_UNIT_ENEMY_PLAYER", "MENU_UNIT_PARTY",
+        "MENU_UNIT_RAID_PLAYER", "MENU_UNIT_FRIEND", "MENU_UNIT_TARGET", "MENU_UNIT_FOCUS" }) do
+        Menu.ModifyMenu(tag, AddMenuEntry)
+    end
+end
+
+---------------------------------------------------------------------------
 -- Events
 ---------------------------------------------------------------------------
 local handlers = {
