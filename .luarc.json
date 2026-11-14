@@ -20,6 +20,10 @@
     "StaticPopupDialogs",
     "StaticPopup_Show",
     "ACCEPT",
-    "CANCEL"
+    "CANCEL",
+    "YES",
+    "NO",
+    "UISpecialFrames",
+    "RAID_CLASS_COLORS"
   ]
 }

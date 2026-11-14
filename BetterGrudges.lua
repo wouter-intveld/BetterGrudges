@@ -22,6 +22,7 @@ local KIND = {
 local db
 local myName -- set at login
 local lastRez = {} -- name -> time, so a recast isn't noted twice
+local RefreshBook -- the book window, defined below; redrawn whenever the book changes
 
 local function Print(msg)
     print(TITLE .. ": " .. msg)
@@ -77,6 +78,7 @@ local function Add(name, guid, kind, extra)
             break
         end
     end
+    RefreshBook()
     return p, e
 end
 
@@ -100,6 +102,49 @@ local function Summary(p)
     if settled > 0 then parts[#parts + 1] = ("|cff999999%d settled|r"):format(settled) end
     if kindness > 0 then parts[#parts + 1] = ("|cff50ff50%d kindness%s|r"):format(kindness, kindness == 1 and "" or "es") end
     return #parts > 0 and table.concat(parts, ", ") or nil
+end
+
+-- One entry as a coloured line: open grudges red, kindnesses green, settled grey.
+local function EntryLine(e)
+    local line = date("%Y-%m-%d", e.t) .. "  " .. Describe(e)
+    if e.done then return "|cff999999" .. line .. " [settled]|r" end
+    if KIND[e.k].grudge then return "|cffff5050" .. line .. "|r" end
+    if KIND[e.k].kind then return "|cff50ff50" .. line .. "|r" end
+    return line
+end
+
+-- Everyone in the book whose name contains filter: open grudges first, then
+-- the most recently met.
+local function SortedPages(filter)
+    local list = {}
+    for name, p in pairs(Book()) do
+        if #p.entries > 0 and (filter == "" or name:lower():find(filter, 1, true)) then
+            list[#list + 1] = { name = name, open = (Counts(p)), seen = p.seen or 0, summary = Summary(p) or "notes" }
+        end
+    end
+    table.sort(list, function(a, b)
+        if a.open ~= b.open then return a.open > b.open end
+        return a.seen > b.seen
+    end)
+    return list
+end
+
+local function Forgive(name)
+    local n = 0
+    for _, e in ipairs(Book()[name].entries) do
+        if KIND[e.k].grudge and not e.done then
+            e.done, n = time(), n + 1
+        end
+    end
+    RefreshBook()
+    Print(n > 0 and ("%s: %d grudge%s forgiven. Generous."):format(name, n, n == 1 and "" or "s")
+        or (name .. " has no open grudges."))
+end
+
+local function Remove(name)
+    Book()[name] = nil
+    RefreshBook()
+    Print(name .. "'s page is torn out of the book.")
 end
 
 ---------------------------------------------------------------------------
@@ -263,42 +308,17 @@ local function SplitName(msg)
     return FindName(words[1]), nil, table.concat(words, " ", 2)
 end
 
-local function PrintLedger(name)
-    local p = Book()[name]
-    if not p or #p.entries == 0 then
-        Print(name .. " isn't in the book.")
-        return
-    end
-    Print(("%s%s: %s"):format(name, p.class and (" (" .. p.class:lower() .. ")") or "", Summary(p) or "nothing to settle"))
-    for _, e in ipairs(p.entries) do
-        local line = date("%Y-%m-%d", e.t) .. "  " .. Describe(e)
-        if e.done then line = "|cff999999" .. line .. " [settled]|r"
-        elseif KIND[e.k].grudge then line = "|cffff5050" .. line .. "|r"
-        elseif KIND[e.k].kind then line = "|cff50ff50" .. line .. "|r" end
-        print("  " .. line)
-    end
-end
-
--- Everyone in the book: open grudges first, then the most recently met.
 local function PrintBook()
-    local list = {}
-    for name, p in pairs(Book()) do
-        local summary = Summary(p)
-        if summary or #p.entries > 0 then
-            list[#list + 1] = { name = name, open = (Counts(p)), seen = p.seen or 0, summary = summary or "notes" }
-        end
-    end
-    table.sort(list, function(a, b)
-        if a.open ~= b.open then return a.open > b.open end
-        return a.seen > b.seen
-    end)
+    local list = SortedPages("")
     if #list == 0 then
         Print("the book is empty. A peaceful life.")
         return
     end
-    Print("the book (/grudge <name> for a page):")
+    Print("the book (/grudge <name> opens a page):")
     for _, g in ipairs(list) do print(("  %s: %s"):format(g.name, g.summary)) end
 end
+
+local ShowBook -- the book window, defined below
 
 SLASH_BETTERGRUDGES1 = "/grudge"
 SLASH_BETTERGRUDGES2 = "/grudges"
@@ -307,11 +327,14 @@ SlashCmdList.BETTERGRUDGES = function(msg)
     local first, rest = msg:match("^(%S*)%s*(.-)$")
     local cmd = first:lower()
     if cmd == "" then
+        ShowBook()
+    elseif cmd == "list" then
         PrintBook()
     elseif cmd == "help" then
         Print("commands:")
-        print("  /grudge - everyone in the book, open grudges first")
-        print("  /grudge <name> - their page in the book (\"target\" works as a name)")
+        print("  /grudge - open the book")
+        print("  /grudge list - everyone in the book, in chat")
+        print("  /grudge <name> - open their page (\"target\" works as a name)")
         print("  /grudge <name> <text> - write a note on their page")
         print("  /grudge forgive <name> - settle all their open grudges")
         print("  /grudge remove <name> - tear their page out of the book")
@@ -325,30 +348,21 @@ SlashCmdList.BETTERGRUDGES = function(msg)
             Print("usage: /grudge remove <name>")
             return
         end
-        Book()[name] = nil
-        Print(name .. "'s page is torn out of the book.")
+        Remove(name)
     elseif cmd == "forgive" then
         local name = rest ~= "" and FindName(rest)
-        local p = name and Book()[name]
-        if not p then
+        if not (name and Book()[name]) then
             Print("usage: /grudge forgive <name>")
             return
         end
-        local n = 0
-        for _, e in ipairs(p.entries) do
-            if KIND[e.k].grudge and not e.done then
-                e.done, n = time(), n + 1
-            end
-        end
-        Print(n > 0 and ("%s: %d grudge%s forgiven. Generous."):format(name, n, n == 1 and "" or "s")
-            or (name .. " has no open grudges."))
+        Forgive(name)
     else
         local name, guid
         name, guid, rest = SplitName(msg)
         if not name then
             Print("your target isn't a player.")
         elseif rest == "" then
-            PrintLedger(name)
+            if Book()[name] then ShowBook(name) else Print(name .. " isn't in the book.") end
         else
             Add(name, guid, "note", { s = rest })
             Print("noted on " .. name .. "'s page.")
@@ -383,6 +397,27 @@ StaticPopupDialogs.BETTERGRUDGES_NOTE = {
     EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
 }
 
+StaticPopupDialogs.BETTERGRUDGES_REMOVE = {
+    text = "Tear %s's page out of the book?",
+    button1 = YES,
+    button2 = NO,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    OnAccept = function(_, name) Remove(name) end,
+}
+
+local CHOICES = {
+    { label = "|cffff5050Grudge|r", kind = "grudgeNote", prompt = "A grudge against %s:" },
+    { label = "|cff50ff50Kindness|r", kind = "kindNote", prompt = "A kindness from %s:" },
+    { label = "Note", kind = "note", prompt = "A note on %s:" },
+}
+
+local function AskEntry(choice, name, guid)
+    StaticPopup_Show("BETTERGRUDGES_NOTE", choice.prompt:format(Ambiguate(name, "none")), nil,
+        { name = name, guid = guid, kind = choice.kind })
+end
+
 local function AddMenuEntry(_, root, context)
     local unit = context and context.unit
     local name, guid
@@ -394,16 +429,8 @@ local function AddMenuEntry(_, root, context)
     if not name then return end
     root:CreateDivider()
     local book = root:CreateButton("Add to the book")
-    local short = Ambiguate(name, "none")
-    for _, choice in ipairs({
-        { label = "|cffff5050Grudge|r", kind = "grudgeNote", prompt = "A grudge against %s:" },
-        { label = "|cff50ff50Kindness|r", kind = "kindNote", prompt = "A kindness from %s:" },
-        { label = "Note", kind = "note", prompt = "A note on %s:" },
-    }) do
-        book:CreateButton(choice.label, function()
-            StaticPopup_Show("BETTERGRUDGES_NOTE", choice.prompt:format(short), nil,
-                { name = name, guid = guid, kind = choice.kind })
-        end)
+    for _, choice in ipairs(CHOICES) do
+        book:CreateButton(choice.label, function() AskEntry(choice, name, guid) end)
     end
 end
 
@@ -412,6 +439,208 @@ if Menu and Menu.ModifyMenu then
     for _, tag in ipairs({ "MENU_UNIT_PLAYER", "MENU_UNIT_ENEMY_PLAYER", "MENU_UNIT_PARTY",
         "MENU_UNIT_RAID_PLAYER", "MENU_UNIT_FRIEND", "MENU_UNIT_TARGET", "MENU_UNIT_FOCUS" }) do
         Menu.ModifyMenu(tag, AddMenuEntry)
+    end
+end
+
+---------------------------------------------------------------------------
+-- The book window: players on the left, the chosen page on the right.
+-- Built the first time it opens.
+---------------------------------------------------------------------------
+local ROW_H, LIST_W, PAGE_W = 32, 190, 400
+local ui, selected
+
+local function ClassColour(class)
+    local c = class and RAID_CLASS_COLORS[class]
+    return c and c.colorStr or "ffffffff"
+end
+
+-- A scroll frame that scrolls with the mouse wheel, and its content frame.
+local function Scroller(parent, width)
+    local scroll = CreateFrame("ScrollFrame", nil, parent)
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(width, 1)
+    scroll:SetScrollChild(content)
+    scroll:EnableMouseWheel(true)
+    scroll:SetScript("OnMouseWheel", function(self, delta)
+        local max = math.max(0, content:GetHeight() - self:GetHeight())
+        self:SetVerticalScroll(math.min(max, math.max(0, self:GetVerticalScroll() - delta * ROW_H * 2)))
+    end)
+    return scroll, content
+end
+
+local function ListRow(i)
+    local row = ui.rows[i]
+    if row then return row end
+    row = CreateFrame("Button", nil, ui.listContent)
+    row:SetSize(LIST_W, ROW_H)
+    row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_H)
+    row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+    row.selected = row:CreateTexture(nil, "BACKGROUND")
+    row.selected:SetAllPoints()
+    row.selected:SetColorTexture(1, 0.82, 0, 0.15)
+    row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    row.name:SetPoint("TOPLEFT", 6, -3)
+    row.name:SetPoint("RIGHT", -4, 0)
+    row.name:SetJustifyH("LEFT")
+    row.tally = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    row.tally:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
+    row.tally:SetPoint("RIGHT", -4, 0)
+    row.tally:SetJustifyH("LEFT")
+    row:SetScript("OnClick", function(self)
+        selected = self.player
+        RefreshBook()
+    end)
+    ui.rows[i] = row
+    return row
+end
+
+local function PageLine(i)
+    local fs = ui.lines[i]
+    if not fs then
+        fs = ui.pageContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        fs:SetWidth(PAGE_W - 10)
+        fs:SetJustifyH("LEFT")
+        ui.lines[i] = fs
+    end
+    return fs
+end
+
+local function CreateBook()
+    local f = CreateFrame("Frame", "BetterGrudgesBook", UIParent, "BasicFrameTemplateWithInset")
+    f:SetSize(LIST_W + PAGE_W + 50, 440)
+    f:SetPoint("CENTER")
+    f:SetFrameStrata("DIALOG")
+    f:SetToplevel(true)
+    f:SetClampedToScreen(true)
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+    f:Hide()
+    tinsert(UISpecialFrames, "BetterGrudgesBook") -- Escape closes it
+    local title = f.TitleText or f.title
+    if not title then
+        title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        title:SetPoint("TOP", 0, -6)
+    end
+    title:SetText(TITLE .. ": the book")
+    ui = { frame = f, rows = {}, lines = {}, buttons = {} }
+
+    local search = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+    search:SetSize(LIST_W - 10, 20)
+    search:SetPoint("TOPLEFT", 22, -32)
+    search:SetAutoFocus(false)
+    search:SetScript("OnTextChanged", function() RefreshBook() end)
+    search:SetScript("OnEscapePressed", search.ClearFocus)
+    local hint = search:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    hint:SetPoint("LEFT", 2, 0)
+    hint:SetText("Search")
+    search:SetScript("OnEditFocusGained", function() hint:Hide() end)
+    search:SetScript("OnEditFocusLost", function(self) hint:SetShown(self:GetText() == "") end)
+    ui.search = search
+
+    local list
+    list, ui.listContent = Scroller(f, LIST_W)
+    list:SetPoint("TOPLEFT", 14, -58)
+    list:SetPoint("BOTTOMLEFT", 14, 12)
+    list:SetWidth(LIST_W)
+    ui.empty = f:CreateFontString(nil, "OVERLAY", "GameFontDisable")
+    ui.empty:SetPoint("TOP", list, "TOP", 0, -20)
+    ui.empty:SetWidth(LIST_W - 20)
+
+    local split = f:CreateTexture(nil, "ARTWORK")
+    split:SetColorTexture(1, 0.82, 0, 0.25)
+    split:SetWidth(1)
+    split:SetPoint("TOPLEFT", LIST_W + 20, -32)
+    split:SetPoint("BOTTOMLEFT", LIST_W + 20, 12)
+
+    local x = LIST_W + 32
+    ui.name = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    ui.name:SetPoint("TOPLEFT", x, -34)
+    ui.sub = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    ui.sub:SetPoint("TOPLEFT", ui.name, "BOTTOMLEFT", 0, -4)
+
+    local page
+    page, ui.pageContent = Scroller(f, PAGE_W)
+    page:SetPoint("TOPLEFT", x, -76)
+    page:SetPoint("BOTTOMRIGHT", -14, 44)
+    ui.page = page
+
+    -- Add, forgive and tear out, for the page shown.
+    local prev
+    local function Button(label, width, onClick)
+        local b = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+        b:SetSize(width, 22)
+        if prev then b:SetPoint("LEFT", prev, "RIGHT", 4, 0) else b:SetPoint("BOTTOMLEFT", x - 4, 14) end
+        b:SetText(label)
+        b:SetScript("OnClick", function() if selected then onClick(selected) end end)
+        ui.buttons[#ui.buttons + 1] = b
+        prev = b
+        return b
+    end
+    for _, choice in ipairs(CHOICES) do
+        Button(choice.label, 72, function(name) AskEntry(choice, name) end)
+    end
+    ui.forgive = Button("Forgive", 72, Forgive)
+    Button("Tear out", 80, function(name) StaticPopup_Show("BETTERGRUDGES_REMOVE", name, nil, name) end)
+
+    f:SetScript("OnShow", function() RefreshBook() end)
+end
+
+RefreshBook = function()
+    if not (ui and ui.frame:IsShown()) then return end
+    local book = Book()
+    local list = SortedPages(ui.search:GetText():lower())
+    if selected and not book[selected] then selected = nil end
+    if not selected and list[1] then selected = list[1].name end
+
+    for i, g in ipairs(list) do
+        local row = ListRow(i)
+        row.player = g.name
+        row.name:SetText("|c" .. ClassColour(book[g.name].class) .. g.name .. "|r")
+        row.tally:SetText(g.summary)
+        row.selected:SetShown(g.name == selected)
+        row:Show()
+    end
+    for i = #list + 1, #ui.rows do ui.rows[i]:Hide() end
+    ui.listContent:SetHeight(math.max(1, #list * ROW_H))
+    ui.empty:SetText(#list == 0 and (next(book) and "No one by that name." or "The book is empty. A peaceful life.") or "")
+
+    local p = selected and book[selected]
+    for _, b in ipairs(ui.buttons) do b:SetEnabled(p ~= nil) end
+    for _, fs in ipairs(ui.lines) do fs:Hide() end
+    if not p then
+        ui.name:SetText("")
+        ui.sub:SetText("")
+        return
+    end
+    ui.forgive:SetEnabled((Counts(p)) > 0)
+    ui.name:SetText("|c" .. ClassColour(p.class) .. selected .. "|r")
+    local class = p.class and (p.class:sub(1, 1) .. p.class:sub(2):lower() .. ", ") or ""
+    ui.sub:SetText(class .. (Summary(p) or "notes only") .. (p.seen and (", last met " .. date("%Y-%m-%d", p.seen)) or ""))
+
+    -- Newest first: what happened last is what you want to know.
+    local y = 0
+    for i = #p.entries, 1, -1 do
+        local fs = PageLine(#p.entries - i + 1)
+        fs:SetText(EntryLine(p.entries[i]))
+        fs:SetPoint("TOPLEFT", 0, -y)
+        fs:Show()
+        y = y + fs:GetStringHeight() + 6
+    end
+    ui.pageContent:SetHeight(math.max(1, y))
+    ui.page:SetVerticalScroll(0)
+end
+
+ShowBook = function(name)
+    if not ui then CreateBook() end
+    if name then
+        selected = name
+        ui.frame:Show()
+        RefreshBook()
+    else
+        ui.frame:SetShown(not ui.frame:IsShown())
     end
 end
 

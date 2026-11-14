@@ -17,6 +17,13 @@ good and the bad, and reminds you when you see them again.
 Hover over a player and the tooltip shows what you have against them, and what
 you owe them.
 
+## The book
+
+`/grudge` opens the book: everyone you have met on the left, open grudges
+first, with a search box; their page on the right, newest first. Buttons below
+the page add a grudge, a kindness or a note, forgive their grudges, or tear the
+page out.
+
 ## Notes
 
 Right-click a player (their portrait, a nameplate, a party or raid frame, or
@@ -26,8 +33,9 @@ by forgiving.
 
 ## Commands
 
-- `/grudge` lists everyone in the book, open grudges first.
-- `/grudge <name>` shows their page in the book. `target` works as a name.
+- `/grudge` opens the book.
+- `/grudge list` lists everyone in the book in chat, open grudges first.
+- `/grudge <name>` opens their page. `target` works as a name.
 - `/grudge <name> <text>` writes a note on their page.
 - `/grudge forgive <name>` settles all their open grudges.
 - `/grudge remove <name>` tears their page out of the book.
