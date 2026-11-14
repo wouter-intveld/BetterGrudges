@@ -7,4 +7,5 @@
 ## IconTexture: Interface\AddOns\BetterGrudges\icon
 ## SavedVariables: BetterGrudgesDB
 
+embeds.xml
 BetterGrudges.lua

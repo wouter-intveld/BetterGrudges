@@ -4,6 +4,7 @@ local TITLE = "|cffcda552Better|rGrudges"
 local DEFAULTS = {
     quiet = false, -- don't print new entries to chat
     realms = {},   -- realm -> player name -> record (see Record)
+    minimap = {},  -- LibDBIcon's position and hide flag
 }
 
 -- Entry kinds. A grudge stays open until a matching win settles it.
@@ -350,6 +351,12 @@ SlashCmdList.BETTERGRUDGES = function(msg)
         print("  /grudge forgive <name> - settle all their open grudges")
         print("  /grudge remove <name> - tear their page out of the book")
         print("  /grudge quiet - don't print new entries")
+        print("  /grudge minimap - hide or show the minimap button")
+    elseif cmd == "minimap" then
+        db.minimap.hide = not db.minimap.hide
+        local icon = LibStub("LibDBIcon-1.0")
+        if db.minimap.hide then icon:Hide(ADDON) else icon:Show(ADDON) end
+        Print("minimap button " .. (db.minimap.hide and "hidden" or "shown"))
     elseif cmd == "quiet" then
         db.quiet = not db.quiet
         Print("new entries " .. (db.quiet and "muted" or "printed"))
@@ -778,6 +785,29 @@ ShowBook = function(name)
 end
 
 ---------------------------------------------------------------------------
+-- Minimap button (and the minimap's addon menu): click opens the book.
+---------------------------------------------------------------------------
+local function RegisterMinimapButton()
+    local launcher = LibStub("LibDataBroker-1.1"):NewDataObject(ADDON, {
+        type = "launcher",
+        text = ADDON,
+        icon = "Interface\\AddOns\\BetterGrudges\\minimap",
+        OnClick = function() ShowBook() end,
+        OnTooltipShow = function(tooltip)
+            local open = 0
+            for _, p in pairs(Book()) do open = open + (Counts(p)) end
+            tooltip:AddLine(TITLE)
+            tooltip:AddLine(open == 0 and "No open grudges."
+                or ("|c%s%d open grudge%s|r"):format(CHAT.grudge, open, open == 1 and "" or "s"), 1, 1, 1)
+            tooltip:AddLine("Click to open the book. Drag to move.", 0.6, 0.6, 0.6)
+        end,
+    })
+    local icon = LibStub("LibDBIcon-1.0")
+    icon:Register(ADDON, launcher, db.minimap)
+    if icon.AddButtonToCompartment then icon:AddButtonToCompartment(ADDON) end
+end
+
+---------------------------------------------------------------------------
 -- Events
 ---------------------------------------------------------------------------
 local handlers = {
@@ -805,6 +835,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
             if name == "UNIT_AURA" then frame:RegisterUnitEvent(name, "player") else frame:RegisterEvent(name) end
         end
         TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, OnUnitTooltip)
+        RegisterMinimapButton()
         return
     end
     handlers[event](...)

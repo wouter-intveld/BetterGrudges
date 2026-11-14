@@ -19,7 +19,7 @@ you owe them.
 
 ## The book
 
-`/grudge` opens the book: everyone you have met on the left, open grudges
+`/grudge`, or the minimap button, opens the book: everyone you have met on the left, open grudges
 first, with a search box and an Add button for a new player (your target's
 name is filled in); their page on the right, newest first. Buttons below
 the page add a grudge, a kindness or a note, forgive their grudges, or tear the
@@ -41,5 +41,6 @@ by forgiving.
 - `/grudge forgive <name>` settles all their open grudges.
 - `/grudge remove <name>` tears their page out of the book.
 - `/grudge quiet` stops printing new entries to chat.
+- `/grudge minimap` hides or shows the minimap button, which opens the book.
 
 The book is shared by all your characters, with one book per realm.

@@ -26,6 +26,10 @@
     "UISpecialFrames",
     "RAID_CLASS_COLORS",
     "GameTooltip_Hide",
-    "CLASS_ICON_TCOORDS"
+    "CLASS_ICON_TCOORDS",
+    "LibStub"
+  ],
+  "workspace.ignoreDir": [
+    "Libs"
   ]
 }
