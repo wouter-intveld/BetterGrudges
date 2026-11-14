@@ -305,7 +305,8 @@ end
 ---------------------------------------------------------------------------
 local function OnUnitTooltip(tooltip)
     local _, unit = tooltip:GetUnit()
-    if not (unit and UnitIsPlayer(unit)) or UnitIsUnit(unit, "player") then return end
+    -- The unit token itself can be hidden, and passing it on is an error.
+    if not unit or issecret(unit) or not UnitIsPlayer(unit) or UnitIsUnit(unit, "player") then return end
     local name = UnitBookName(unit)
     local p = name and Book()[name]
     if p and not p.race then Record(name, UnitGUID(unit)) end -- added by name: learn race and class now
@@ -529,6 +530,7 @@ end
 
 local function AddMenuEntry(_, root, context)
     local unit = context and context.unit
+    if unit and issecret(unit) then return end
     local name, guid
     if unit and UnitIsPlayer(unit) and not UnitIsUnit(unit, "player") then
         name, guid = UnitBookName(unit), UnitGUID(unit)
@@ -1034,7 +1036,7 @@ local handlers = {
     PLAYER_TARGET_CHANGED = UpdateMarksSoon,
     PLAYER_FOCUS_CHANGED = UpdateMarksSoon,
     PLAYER_ENTERING_WORLD = UpdateMarksSoon,
-    NAME_PLATE_UNIT_ADDED = function(unit) UpdatePlateMark(unit) end,
+    NAME_PLATE_UNIT_ADDED = function(unit) if not issecret(unit) then UpdatePlateMark(unit) end end,
     NAME_PLATE_UNIT_REMOVED = function(unit) if marks[unit] then marks[unit]:Hide() end end,
     CHAT_MSG_SYSTEM = OnSystemMessage,
     RESURRECT_REQUEST = OnResurrectRequest,
