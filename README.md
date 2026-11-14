@@ -20,7 +20,9 @@ you owe them.
 ## Notes
 
 Right-click a player (their portrait, a nameplate, a party or raid frame, or
-their name in chat) and choose "Add to the book" to write a note on their page.
+their name in chat) and choose "Add to the book", then Grudge, Kindness or Note, to write it on their
+page. A grudge you write is settled like any other: by an honourable kill, or
+by forgiving.
 
 ## Commands
 

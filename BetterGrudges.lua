@@ -15,6 +15,8 @@ local KIND = {
     rez = { kind = true, text = "offered you a resurrection" },
     buff = { kind = true, text = "buffed you with %s" },
     note = { text = "%s" },
+    grudgeNote = { grudge = true, settledBy = "killedThem", text = "%s" },
+    kindNote = { kind = true, text = "%s" },
 }
 
 local db
@@ -254,7 +256,8 @@ local function PrintLedger(name)
     for _, e in ipairs(p.entries) do
         local line = date("%Y-%m-%d", e.t) .. "  " .. Describe(e)
         if e.done then line = "|cff999999" .. line .. " [settled]|r"
-        elseif KIND[e.k].grudge then line = "|cffff5050" .. line .. "|r" end
+        elseif KIND[e.k].grudge then line = "|cffff5050" .. line .. "|r"
+        elseif KIND[e.k].kind then line = "|cff50ff50" .. line .. "|r" end
         print("  " .. line)
     end
 end
@@ -330,7 +333,7 @@ end
 -- Right-click menu: "Add to the book" on a player asks for a note.
 ---------------------------------------------------------------------------
 StaticPopupDialogs.BETTERGRUDGES_NOTE = {
-    text = "Add to the book: %s",
+    text = "%s",
     button1 = ACCEPT,
     button2 = CANCEL,
     hasEditBox = true,
@@ -341,7 +344,7 @@ StaticPopupDialogs.BETTERGRUDGES_NOTE = {
     OnAccept = function(self, data)
         local text = (self.EditBox or self.editBox):GetText():match("^%s*(.-)%s*$")
         if text ~= "" then
-            local p = Add(data.name, data.guid, "note", { s = text })
+            local p = Add(data.name, data.guid, data.kind, { s = text })
             Print(("noted on %s's page (%s)."):format(data.name, Summary(p) or "notes"))
         end
     end,
@@ -363,9 +366,18 @@ local function AddMenuEntry(_, root, context)
     end
     if not name then return end
     root:CreateDivider()
-    root:CreateButton("Add to the book", function()
-        StaticPopup_Show("BETTERGRUDGES_NOTE", Ambiguate(name, "none"), nil, { name = name, guid = guid })
-    end)
+    local book = root:CreateButton("Add to the book")
+    local short = Ambiguate(name, "none")
+    for _, choice in ipairs({
+        { label = "|cffff5050Grudge|r", kind = "grudgeNote", prompt = "A grudge against %s:" },
+        { label = "|cff50ff50Kindness|r", kind = "kindNote", prompt = "A kindness from %s:" },
+        { label = "Note", kind = "note", prompt = "A note on %s:" },
+    }) do
+        book:CreateButton(choice.label, function()
+            StaticPopup_Show("BETTERGRUDGES_NOTE", choice.prompt:format(short), nil,
+                { name = name, guid = guid, kind = choice.kind })
+        end)
+    end
 end
 
 -- The player menus: unit frames, nameplates, party and raid, and names in chat.
