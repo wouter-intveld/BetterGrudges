@@ -27,7 +27,11 @@
     "RAID_CLASS_COLORS",
     "GameTooltip_Hide",
     "CLASS_ICON_TCOORDS",
-    "LibStub"
+    "LibStub",
+    "Settings",
+    "SettingsPanel",
+    "CreateSettingsListSectionHeaderInitializer",
+    "MinimalSliderWithSteppersMixin"
   ],
   "workspace.ignoreDir": [
     "Libs"

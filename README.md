@@ -28,6 +28,9 @@ EllesmereUI, and with any nameplate addon. Nameplate marks show in the open
 world only, since the game keeps addons away from enemy nameplates in
 instances.
 
+Under Options > AddOns > BetterGrudges (or right-click the minimap button) you
+choose where marks show, whether kindnesses get one, and their size.
+
 ## The book
 
 Open it with `/grudge` or the minimap button.
@@ -51,6 +54,7 @@ tagged my mob, ganked me, left the group. Or write your own.
 | Command | Action |
 | --- | --- |
 | `/grudge` | Open the book |
+| `/grudge config` | Open the settings |
 | `/grudge <name>` | Open their page (`target` works as a name) |
 | `/grudge <name> <text>` | Write a note on their page |
 | `/grudge forgive <name>` | Settle all their open grudges |

@@ -5,7 +5,14 @@ local DEFAULTS = {
     quiet = false, -- don't print new entries to chat
     realms = {},   -- realm -> player name -> record (see Record)
     minimap = {},  -- LibDBIcon's position and hide flag
+    marksFrames = true,   -- marks on the target and focus frames
+    marksPlates = true,   -- marks beside nameplates
+    marksKindness = true, -- kindnesses get a mark too, not only open grudges
+    markSize = 22,
 }
+
+local settingsCategory -- Options > AddOns > BetterGrudges, see RegisterSettings
+local SetMinimapShown -- defined with the minimap button below
 
 -- Entry kinds. A grudge stays open until a matching win settles it.
 local KIND = {
@@ -346,6 +353,7 @@ SlashCmdList.BETTERGRUDGES = function(msg)
     elseif cmd == "help" then
         Print("commands:")
         print("  /grudge - open the book")
+        print("  /grudge config - open the settings")
         print("  /grudge list - everyone in the book, in chat")
         print("  /grudge <name> - open their page (\"target\" works as a name)")
         print("  /grudge <name> <text> - write a note on their page")
@@ -354,14 +362,15 @@ SlashCmdList.BETTERGRUDGES = function(msg)
         print("  /grudge quiet - don't print new entries")
         print("  /grudge minimap - hide or show the minimap button")
         print("  /grudge marks - hide or show the marks on unit frames and nameplates")
+    elseif cmd == "config" then
+        Settings.OpenToCategory(settingsCategory:GetID())
     elseif cmd == "marks" then
-        db.hideMarks = not db.hideMarks or nil
+        local on = not (db.marksFrames or db.marksPlates)
+        db.marksFrames, db.marksPlates = on, on
         UpdateMarks()
-        Print("marks on unit frames and nameplates " .. (db.hideMarks and "hidden" or "shown"))
+        Print("marks on unit frames and nameplates " .. (on and "shown" or "hidden"))
     elseif cmd == "minimap" then
-        db.minimap.hide = not db.minimap.hide
-        local icon = LibStub("LibDBIcon-1.0")
-        if db.minimap.hide then icon:Hide(ADDON) else icon:Show(ADDON) end
+        SetMinimapShown(db.minimap.hide)
         Print("minimap button " .. (db.minimap.hide and "hidden" or "shown"))
     elseif cmd == "quiet" then
         db.quiet = not db.quiet
@@ -557,12 +566,12 @@ local function MarkFrame(unit)
 end
 
 local function MarkState(unit)
-    if db.hideMarks or not (UnitExists(unit) and UnitIsPlayer(unit)) or UnitIsUnit(unit, "player") then return nil end
+    if not (UnitExists(unit) and UnitIsPlayer(unit)) or UnitIsUnit(unit, "player") then return nil end
     local p = Book()[Ambiguate(GetUnitName(unit, true), "none")]
     if not p then return nil end
     local open, _, kindness = Counts(p)
     if open > 0 then return "grudge" end
-    if kindness > 0 then return "kind" end
+    if kindness > 0 and db.marksKindness then return "kind" end
 end
 
 local function ShowMark(unit, state, anchor, point, relPoint)
@@ -572,6 +581,7 @@ local function ShowMark(unit, state, anchor, point, relPoint)
         return
     end
     m.icon:SetTexture(MARK_TEXTURE[state])
+    m:SetSize(db.markSize, db.markSize)
     m:ClearAllPoints()
     m:SetPoint(point, anchor, relPoint)
     m:Show()
@@ -588,12 +598,12 @@ local function UpdateFrameMark(unit)
     end
     -- On Blizzard's frame (as BetterBlizzFrames styles it) the mark sits on the portrait.
     local portrait = frame and frame.TargetFrameContainer and frame.TargetFrameContainer.Portrait
-    ShowMark(unit, MarkState(unit), portrait or frame, "CENTER", "TOPLEFT")
+    ShowMark(unit, db.marksFrames and MarkState(unit), portrait or frame, "CENTER", "TOPLEFT")
 end
 
 -- Beside the nameplate. Not in instances: enemy nameplates are off limits there.
 local function UpdatePlateMark(unit)
-    local plate = not IsInInstance() and C_NamePlate.GetNamePlateForUnit(unit)
+    local plate = db.marksPlates and not IsInInstance() and C_NamePlate.GetNamePlateForUnit(unit)
     ShowMark(unit, plate and MarkState(unit), plate, "RIGHT", "LEFT")
 end
 
@@ -899,26 +909,84 @@ ShowBook = function(name)
 end
 
 ---------------------------------------------------------------------------
--- Minimap button (and the minimap's addon menu): click opens the book.
+-- Minimap button (and the minimap's addon menu): click opens the book,
+-- right-click the settings.
 ---------------------------------------------------------------------------
+SetMinimapShown = function(shown)
+    db.minimap.hide = not shown
+    local icon = LibStub("LibDBIcon-1.0")
+    if shown then icon:Show(ADDON) else icon:Hide(ADDON) end
+end
+
 local function RegisterMinimapButton()
     local launcher = LibStub("LibDataBroker-1.1"):NewDataObject(ADDON, {
         type = "launcher",
         text = ADDON,
         icon = "Interface\\AddOns\\BetterGrudges\\minimap",
-        OnClick = function() ShowBook() end,
+        OnClick = function(_, button)
+            if button == "RightButton" then Settings.OpenToCategory(settingsCategory:GetID()) else ShowBook() end
+        end,
         OnTooltipShow = function(tooltip)
             local open = 0
             for _, p in pairs(Book()) do open = open + (Counts(p)) end
             tooltip:AddLine(TITLE)
             tooltip:AddLine(open == 0 and "No open grudges."
                 or ("|c%s%d open grudge%s|r"):format(CHAT.grudge, open, open == 1 and "" or "s"), 1, 1, 1)
-            tooltip:AddLine("Click to open the book. Drag to move.", 0.6, 0.6, 0.6)
+            tooltip:AddLine("Click to open the book, right-click for settings. Drag to move.", 0.6, 0.6, 0.6)
         end,
     })
     local icon = LibStub("LibDBIcon-1.0")
     icon:Register(ADDON, launcher, db.minimap)
     if icon.AddButtonToCompartment then icon:AddButtonToCompartment(ADDON) end
+end
+
+---------------------------------------------------------------------------
+-- Settings: Options > AddOns > BetterGrudges
+---------------------------------------------------------------------------
+local function RegisterSettings()
+    local category = Settings.RegisterVerticalLayoutCategory(TITLE)
+    local layout = SettingsPanel:GetLayout(category)
+
+    local function Header(text)
+        if CreateSettingsListSectionHeaderInitializer then
+            layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(text))
+        end
+    end
+    local function Proxy(key, varType, name, default, get, set)
+        return Settings.RegisterProxySetting(category, "BETTERGRUDGES_" .. key, varType, name, default, get, set)
+    end
+    local function Checkbox(key, name, tooltip, onChange)
+        local setting = Proxy(key, Settings.VarType.Boolean, name, DEFAULTS[key],
+            function() return db[key] end,
+            function(value)
+                db[key] = value
+                if onChange then onChange() end
+            end)
+        Settings.CreateCheckbox(category, setting, tooltip)
+    end
+
+    Header("Marks")
+    Checkbox("marksFrames", "On target and focus frames", "A medallion on the target and focus frames of players in the book.", UpdateMarks)
+    Checkbox("marksPlates", "Beside nameplates", "A medallion beside the nameplates of players in the book. Open world only: the game keeps addons away from enemy nameplates in instances.", UpdateMarks)
+    Checkbox("marksKindness", "Mark kindnesses too", "A heart on green for players you owe a kindness. Off: only open grudges get a mark.", UpdateMarks)
+    local size = Proxy("markSize", Settings.VarType.Number, "Mark size", DEFAULTS.markSize,
+        function() return db.markSize end,
+        function(value)
+            db.markSize = value
+            UpdateMarks()
+        end)
+    local options = Settings.CreateSliderOptions(14, 36, 1)
+    options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, function(value) return ("%d px"):format(value) end)
+    Settings.CreateSlider(category, size, options, "Size of the marks.")
+
+    Header("General")
+    Checkbox("quiet", "Mute chat messages", "Don't print new entries, like a grudge being noted, to chat.")
+    local minimap = Proxy("minimapShown", Settings.VarType.Boolean, "Minimap button", true,
+        function() return not db.minimap.hide end, SetMinimapShown)
+    Settings.CreateCheckbox(category, minimap, "Click opens the book, right-click these settings.")
+
+    Settings.RegisterAddOnCategory(category)
+    settingsCategory = category
 end
 
 ---------------------------------------------------------------------------
@@ -948,12 +1016,15 @@ frame:SetScript("OnEvent", function(_, event, ...)
         for key, value in pairs(DEFAULTS) do
             if db[key] == nil then db[key] = type(value) == "table" and CopyTable(value) or value end
         end
+        if db.hideMarks then db.marksFrames, db.marksPlates = false, false end -- the old on/off switch
+        db.hideMarks = nil
         myName = UnitName("player")
         for name in pairs(handlers) do
             if name == "UNIT_AURA" then frame:RegisterUnitEvent(name, "player") else frame:RegisterEvent(name) end
         end
         TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, OnUnitTooltip)
         RegisterMinimapButton()
+        RegisterSettings()
         return
     end
     handlers[event](...)
