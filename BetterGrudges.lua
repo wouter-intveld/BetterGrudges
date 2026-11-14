@@ -122,12 +122,13 @@ local CHAT = { grudge = "ffff5050", kind = "ff50ff50", settled = "ff999999" }
 -- On parchment only a short tag carries the colour; the text stays dark ink.
 local INK = { grudge = "ff8a1008", kind = "ff0b4210", settled = "ff6e5e4a", plain = "ff140c06", kindCount = "ff140c06" }
 
-local function Summary(p, colours)
+-- short: leave settled grudges out, for the one-line tally in the book's list.
+local function Summary(p, colours, short)
     colours = colours or CHAT
     local open, settled, kindness = Counts(p)
     local parts = {}
     if open > 0 then parts[#parts + 1] = ("|c%s%d grudge%s|r"):format(colours.grudge, open, open == 1 and "" or "s") end
-    if settled > 0 then parts[#parts + 1] = ("|c%s%d settled|r"):format(colours.settled, settled) end
+    if settled > 0 and not short then parts[#parts + 1] = ("|c%s%d settled|r"):format(colours.settled, settled) end
     if kindness > 0 then parts[#parts + 1] = ("|c%s%d kindness%s|r"):format(colours.kindCount or colours.kind, kindness, kindness == 1 and "" or "es") end
     return #parts > 0 and table.concat(parts, ", ") or nil
 end
@@ -144,11 +145,11 @@ end
 
 -- Everyone in the book whose name contains filter: open grudges first, then
 -- the most recently met.
-local function SortedPages(filter, colours)
+local function SortedPages(filter, colours, short)
     local list = {}
     for name, p in pairs(Book()) do
         if filter == "" or name:lower():find(filter, 1, true) then
-            local summary = Summary(p, colours) or (#p.entries > 0 and "notes" or "empty page")
+            local summary = Summary(p, colours, short) or (#p.entries > 0 and "notes" or "empty page")
             list[#list + 1] = { name = name, open = (Counts(p)), seen = p.seen or 0, summary = summary }
         end
     end
@@ -724,10 +725,12 @@ local function ListRow(i)
     row.name:SetPoint("TOPLEFT", 38, -3)
     row.name:SetPoint("RIGHT", -4, 0)
     row.name:SetJustifyH("LEFT")
+    row.name:SetWordWrap(false) -- one line each, or a row runs into the next
     row.tally = Ink(row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
     row.tally:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
     row.tally:SetPoint("RIGHT", -4, 0)
     row.tally:SetJustifyH("LEFT")
+    row.tally:SetWordWrap(false)
     row:SetScript("OnClick", function(self)
         selected = self.player
         RefreshBook()
@@ -833,10 +836,12 @@ local function CreateBook()
     ui.name:SetPoint("TOPLEFT", x + 48, -46)
     ui.sub = Ink(f:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
     ui.sub:SetPoint("TOPLEFT", ui.name, "BOTTOMLEFT", 0, -4)
+    ui.tally = Ink(f:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
+    ui.tally:SetPoint("TOPLEFT", ui.sub, "BOTTOMLEFT", 0, -3)
 
     local page
     page, ui.pageContent = Scroller(f, PAGE_W)
-    page:SetPoint("TOPLEFT", x, -88)
+    page:SetPoint("TOPLEFT", x, -114)
     page:SetPoint("BOTTOMRIGHT", -14, 44)
     ui.page = page
 
@@ -871,7 +876,7 @@ RefreshBook = function()
     if db then UpdateMarks() end -- the book changed, so a mark may have too
     if not (ui and ui.frame:IsShown()) then return end
     local book = Book()
-    local list = SortedPages(ui.search:GetText():lower(), INK)
+    local list = SortedPages(ui.search:GetText():lower(), INK, true)
     if selected and not book[selected] then selected = nil end
     if not selected and list[1] then selected = list[1].name end
 
@@ -895,14 +900,19 @@ RefreshBook = function()
     if not p then
         ui.name:SetText("")
         ui.sub:SetText("")
+        ui.tally:SetText("")
         ui.picture:Hide()
         return
     end
     ui.forgive:SetEnabled((Counts(p)) > 0)
     ui.name:SetText(selected)
     SetPicture(ui.picture, p)
-    local class = p.class and (p.class:sub(1, 1) .. p.class:sub(2):lower() .. ", ") or ""
-    ui.sub:SetText(class .. (Summary(p, INK) or (#p.entries > 0 and "notes only" or "empty page")) .. (p.seen and (", last met " .. date("%Y-%m-%d", p.seen)) or ""))
+    -- Two lines under the name: who and when, then the tally.
+    local who = {}
+    if p.class then who[#who + 1] = p.class:sub(1, 1) .. p.class:sub(2):lower() end
+    if p.seen then who[#who + 1] = "last met " .. date("%Y-%m-%d", p.seen) end
+    ui.sub:SetText(table.concat(who, ", "))
+    ui.tally:SetText(Summary(p, INK) or (#p.entries > 0 and "notes only" or "empty page"))
 
     -- Newest first: what happened last is what you want to know.
     local y = 0
