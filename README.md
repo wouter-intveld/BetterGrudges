@@ -1,46 +1,59 @@
 # BetterGrudges
 
-A friendly book of grudges. BetterGrudges remembers the players you meet, the
-good and the bad, and reminds you when you see them again.
+A friendly book of grudges for the World of Warcraft Forever client. It
+remembers the players you meet, the ones who wronged you and the ones who
+helped, and reminds you when you see them again.
 
-## What it records
+## What it writes down by itself
 
-- A player who kills you: a grudge, with a note when you were busy fighting
-  something else at the time.
-- A player who beats you in a duel: a grudge too, a friendly one.
-- Killing a player you hold a grudge against settles the oldest one: avenged.
-  Winning a duel back settles a duel grudge.
-- A player who offers you a resurrection: a kindness.
-- A player who buffs you in the open world: a kindness, at most once a day per
-  player, so cities and dungeons don't fill the book.
+- **Grudges:** a player who kills you, noting when they caught you while you
+  were busy fighting something else, and a player who beats you in a duel.
+- **Settling the score:** an honourable kill on someone you hold a grudge
+  against avenges your oldest grudge against them; winning a duel back settles
+  a duel grudge. Settled grudges stay on the page, greyed out and marked settled.
+- **Kindnesses:** a player who offers you a resurrection, and a player who
+  buffs you in the open world (at most once a day per player, so cities and
+  dungeons don't fill the book).
 
-Hover over a player and the tooltip shows what you have against them, and what
-you owe them.
+Hover over a player and the tooltip tells you what you have against them, and
+what you owe them.
 
 ## The book
 
-`/grudge`, or the minimap button, opens the book: everyone you have met on the left, open grudges
-first, with a search box and an Add button for a new player (your target's
-name is filled in); their page on the right, newest first. Buttons below
-the page add a grudge, a kindness or a note, forgive their grudges, or tear the
-page out.
+Open it with `/grudge` or the minimap button.
 
-## Notes
+- Everyone you have met on the left, with their race portrait and class
+  colour, open grudges first. A search box finds a name; Add starts a page for
+  a new player, with your target's name already filled in.
+- Their page on the right, newest entry first.
+- Buttons below the page write a grudge, a kindness or a note, forgive all
+  their grudges, or tear the page out.
+
+## Writing your own
 
 Right-click a player (their portrait, a nameplate, a party or raid frame, or
-their name in chat) and choose "Add to the book", then Grudge, Kindness or Note, to write it on their
-page. A grudge you write is settled like any other: by an honourable kill, or
-by forgiving.
+their name in chat) and choose **Add to the book**. A grudge comes with
+ready-made reasons, one click each: rude, ninja looter, stole my objective,
+tagged my mob, ganked me, left the group. Or write your own.
 
 ## Commands
 
-- `/grudge` opens the book.
-- `/grudge list` lists everyone in the book in chat, open grudges first.
-- `/grudge <name>` opens their page. `target` works as a name.
-- `/grudge <name> <text>` writes a note on their page.
-- `/grudge forgive <name>` settles all their open grudges.
-- `/grudge remove <name>` tears their page out of the book.
-- `/grudge quiet` stops printing new entries to chat.
-- `/grudge minimap` hides or shows the minimap button, which opens the book.
+| Command | Action |
+| --- | --- |
+| `/grudge` | Open the book |
+| `/grudge <name>` | Open their page (`target` works as a name) |
+| `/grudge <name> <text>` | Write a note on their page |
+| `/grudge forgive <name>` | Settle all their open grudges |
+| `/grudge remove <name>` | Tear their page out of the book |
+| `/grudge list` | List the book in chat |
+| `/grudge quiet` | Stop printing new entries to chat |
+| `/grudge minimap` | Hide or show the minimap button |
 
-The book is shared by all your characters, with one book per realm.
+The book is shared by all your characters, one book per realm.
+
+## Good to know
+
+This client keeps the combat log from addons, so BetterGrudges works from
+what it can see: the player who had you targeted when you died counts as your
+killer, and your kills come from the honourable-kill message, so low-level
+players you defeat aren't noted.
