@@ -462,7 +462,16 @@ StaticPopupDialogs.BETTERGRUDGES_REMOVE = {
 }
 
 local CHOICES = {
-    { label = "|cffff5050Grudge|r", kind = "grudgeNote", prompt = "A grudge against %s:" },
+    { label = "|cffff5050Grudge|r", kind = "grudgeNote", prompt = "A grudge against %s:",
+        -- Common grudges, one click each; text is how the entry reads on the page.
+        reasons = {
+            { label = "Rude", text = "was rude" },
+            { label = "Ninja looter", text = "ninja-looted" },
+            { label = "Stole my objective", text = "stole my quest objective" },
+            { label = "Tagged my mob", text = "tagged my mob" },
+            { label = "Ganked me", text = "ganked me" },
+            { label = "Left the group", text = "left the group early" },
+        } },
     { label = "|cff50ff50Kindness|r", kind = "kindNote", prompt = "A kindness from %s:" },
     { label = "Note", kind = "note", prompt = "A note on %s:" },
 }
@@ -470,6 +479,18 @@ local CHOICES = {
 local function AskEntry(choice, name, guid)
     StaticPopup_Show("BETTERGRUDGES_NOTE", choice.prompt:format(Ambiguate(name, "none")), nil,
         { name = name, guid = guid, kind = choice.kind })
+end
+
+-- A choice's reasons as menu buttons, then "Other..." for your own words.
+local function FillReasons(menu, choice, name, guid)
+    for _, reason in ipairs(choice.reasons) do
+        menu:CreateButton(reason.label, function()
+            local p = Add(name, guid, choice.kind, { s = reason.text })
+            Print(("noted on %s's page (%s)."):format(Ambiguate(name, "none"), Summary(p) or "notes"))
+        end)
+    end
+    menu:CreateDivider()
+    menu:CreateButton("Other...", function() AskEntry(choice, name, guid) end)
 end
 
 local function AddMenuEntry(_, root, context)
@@ -484,7 +505,11 @@ local function AddMenuEntry(_, root, context)
     root:CreateDivider()
     local book = root:CreateButton("Add to the book")
     for _, choice in ipairs(CHOICES) do
-        book:CreateButton(choice.label, function() AskEntry(choice, name, guid) end)
+        if choice.reasons then
+            FillReasons(book:CreateButton(choice.label), choice, name, guid)
+        else
+            book:CreateButton(choice.label, function() AskEntry(choice, name, guid) end)
+        end
     end
 end
 
@@ -710,13 +735,19 @@ local function CreateBook()
         b:SetSize(width, 22)
         if prev then b:SetPoint("LEFT", prev, "RIGHT", 4, 0) else b:SetPoint("BOTTOMLEFT", x - 4, 14) end
         b:SetText(label)
-        b:SetScript("OnClick", function() if selected then onClick(selected) end end)
+        b:SetScript("OnClick", function(self) if selected then onClick(selected, self) end end)
         ui.buttons[#ui.buttons + 1] = b
         prev = b
         return b
     end
     for _, choice in ipairs(CHOICES) do
-        Button(choice.label, 72, function(name) AskEntry(choice, name) end)
+        Button(choice.label, 72, function(name, button)
+            if choice.reasons and MenuUtil and MenuUtil.CreateContextMenu then
+                MenuUtil.CreateContextMenu(button, function(_, root) FillReasons(root, choice, name) end)
+            else
+                AskEntry(choice, name)
+            end
+        end)
     end
     ui.forgive = Button("Forgive", 72, Forgive)
     Button("Tear out", 80, function(name) StaticPopup_Show("BETTERGRUDGES_REMOVE", name, nil, name) end)
