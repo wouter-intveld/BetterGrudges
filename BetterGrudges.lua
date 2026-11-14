@@ -47,9 +47,9 @@ local function Record(name, guid)
         p = { entries = {} }
         book[name] = p
     end
-    if guid and not p.class then
-        local _, class = GetPlayerInfoByGUID(guid)
-        p.class = class
+    if guid and not (p.class and p.race) then
+        local _, class, _, race, sex = GetPlayerInfoByGUID(guid)
+        p.class, p.race, p.sex = class or p.class, race or p.race, sex or p.sex
     end
     return p
 end
@@ -278,7 +278,9 @@ end
 local function OnUnitTooltip(tooltip)
     local _, unit = tooltip:GetUnit()
     if not (unit and UnitIsPlayer(unit)) or UnitIsUnit(unit, "player") then return end
-    local p = Book()[Ambiguate(GetUnitName(unit, true), "none")]
+    local name = Ambiguate(GetUnitName(unit, true), "none")
+    local p = Book()[name]
+    if p and not p.race then Record(name, UnitGUID(unit)) end -- added by name: learn race and class now
     local summary = p and Summary(p)
     if summary then tooltip:AddLine("Grudges: " .. summary) end
 end
@@ -501,6 +503,42 @@ local function ClassColour(class)
     return 0, 0, 0, 0
 end
 
+-- The game's round race-and-gender icon, as on character creation.
+local function RaceAtlas(p)
+    if not p.race then return nil end
+    local race = p.race:lower() == "scourge" and "undead" or p.race:lower()
+    local sex = p.sex == 3 and "female" or "male"
+    for _, fmt in ipairs({ "raceicon128-%s-%s", "raceicon-%s-%s" }) do
+        local atlas = fmt:format(race, sex)
+        if C_Texture.GetAtlasInfo(atlas) then return atlas end
+    end
+end
+
+-- A player's picture: their live portrait while they're your target (live
+-- only: the game can't keep one), else the race icon, else the class icon.
+local function SetPicture(tex, p, name, live)
+    if live and UnitIsPlayer("target") and Ambiguate(GetUnitName("target", true), "none") == name then
+        SetPortraitTexture(tex, "target")
+        tex:SetTexCoord(0, 1, 0, 1)
+        tex:Show()
+        return
+    end
+    local atlas = RaceAtlas(p)
+    if atlas then
+        tex:SetAtlas(atlas)
+        tex:Show()
+        return
+    end
+    local coords = p.class and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[p.class]
+    if coords then
+        tex:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
+        tex:SetTexCoord(unpack(coords))
+        tex:Show()
+        return
+    end
+    tex:Hide()
+end
+
 local function Ink(fs)
     fs:SetTextColor(0.08, 0.05, 0.02) -- near black, as the spellbook's text
     fs:SetShadowOffset(0, 0)
@@ -535,8 +573,11 @@ local function ListRow(i)
     row.class:SetPoint("TOPLEFT", 2, -4)
     row.class:SetPoint("BOTTOMLEFT", 2, 4)
     row.class:SetWidth(3)
+    row.picture = row:CreateTexture(nil, "ARTWORK")
+    row.picture:SetSize(24, 24)
+    row.picture:SetPoint("LEFT", 9, 0)
     row.name = Ink(row:CreateFontString(nil, "OVERLAY", "GameFontHighlightMedium"))
-    row.name:SetPoint("TOPLEFT", 10, -3)
+    row.name:SetPoint("TOPLEFT", 38, -3)
     row.name:SetPoint("RIGHT", -4, 0)
     row.name:SetJustifyH("LEFT")
     row.tally = Ink(row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
@@ -641,8 +682,11 @@ local function CreateBook()
     split:SetPoint("BOTTOMLEFT", LIST_W + 20, 16)
 
     local x = LIST_W + 32
+    ui.picture = f:CreateTexture(nil, "ARTWORK")
+    ui.picture:SetSize(40, 40)
+    ui.picture:SetPoint("TOPLEFT", x, -44)
     ui.name = Ink(f:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge"))
-    ui.name:SetPoint("TOPLEFT", x, -46)
+    ui.name:SetPoint("TOPLEFT", x + 48, -46)
     ui.sub = Ink(f:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
     ui.sub:SetPoint("TOPLEFT", ui.name, "BOTTOMLEFT", 0, -4)
 
@@ -685,6 +729,7 @@ RefreshBook = function()
         row.player = g.name
         row.name:SetText(g.name)
         row.class:SetColorTexture(ClassColour(book[g.name].class))
+        SetPicture(row.picture, book[g.name], g.name, false)
         row.tally:SetText(g.summary)
         row.selected:SetShown(g.name == selected)
         row:Show()
@@ -699,10 +744,12 @@ RefreshBook = function()
     if not p then
         ui.name:SetText("")
         ui.sub:SetText("")
+        ui.picture:Hide()
         return
     end
     ui.forgive:SetEnabled((Counts(p)) > 0)
     ui.name:SetText(selected)
+    SetPicture(ui.picture, p, selected, true)
     local class = p.class and (p.class:sub(1, 1) .. p.class:sub(2):lower() .. ", ") or ""
     ui.sub:SetText(class .. (Summary(p, INK) or (#p.entries > 0 and "notes only" or "empty page")) .. (p.seen and (", last met " .. date("%Y-%m-%d", p.seen)) or ""))
 
@@ -737,6 +784,7 @@ local handlers = {
     UNIT_AURA = OnPlayerAura,
     CHAT_MSG_COMBAT_HONOR_GAIN = OnHonorGain,
     PLAYER_DEAD = OnPlayerDead,
+    PLAYER_TARGET_CHANGED = function() RefreshBook() end, -- the live portrait follows your target
     CHAT_MSG_SYSTEM = OnSystemMessage,
     RESURRECT_REQUEST = OnResurrectRequest,
 }

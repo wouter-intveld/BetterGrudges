@@ -25,6 +25,7 @@
     "NO",
     "UISpecialFrames",
     "RAID_CLASS_COLORS",
-    "GameTooltip_Hide"
+    "GameTooltip_Hide",
+    "CLASS_ICON_TCOORDS"
   ]
 }
