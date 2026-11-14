@@ -19,7 +19,7 @@ you owe them.
 
 ## Commands
 
-- `/grudge` lists the players you hold open grudges against.
+- `/grudge` lists everyone in the book, open grudges first.
 - `/grudge <name>` shows their page in the book. `target` works as a name.
 - `/grudge <name> <text>` writes a note on their page.
 - `/grudge forgive <name>` settles all their open grudges.

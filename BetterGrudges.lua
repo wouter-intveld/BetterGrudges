@@ -259,19 +259,25 @@ local function PrintLedger(name)
     end
 end
 
-local function PrintOpen()
+-- Everyone in the book: open grudges first, then the most recently met.
+local function PrintBook()
     local list = {}
     for name, p in pairs(Book()) do
-        local open = Counts(p)
-        if open > 0 then list[#list + 1] = { name = name, open = open } end
+        local summary = Summary(p)
+        if summary or #p.entries > 0 then
+            list[#list + 1] = { name = name, open = (Counts(p)), seen = p.seen or 0, summary = summary or "notes" }
+        end
     end
-    table.sort(list, function(a, b) return a.open > b.open end)
+    table.sort(list, function(a, b)
+        if a.open ~= b.open then return a.open > b.open end
+        return a.seen > b.seen
+    end)
     if #list == 0 then
-        Print("no open grudges. A peaceful life.")
-    else
-        Print("open grudges:")
-        for _, g in ipairs(list) do print(("  %s: %d"):format(g.name, g.open)) end
+        Print("the book is empty. A peaceful life.")
+        return
     end
+    Print("the book (/grudge <name> for a page):")
+    for _, g in ipairs(list) do print(("  %s: %s"):format(g.name, g.summary)) end
 end
 
 SLASH_BETTERGRUDGES1 = "/grudge"
@@ -281,10 +287,10 @@ SlashCmdList.BETTERGRUDGES = function(msg)
     local first, rest = msg:match("^(%S*)%s*(.-)$")
     local cmd = first:lower()
     if cmd == "" then
-        PrintOpen()
+        PrintBook()
     elseif cmd == "help" then
         Print("commands:")
-        print("  /grudge - players you hold open grudges against")
+        print("  /grudge - everyone in the book, open grudges first")
         print("  /grudge <name> - their page in the book (\"target\" works as a name)")
         print("  /grudge <name> <text> - write a note on their page")
         print("  /grudge forgive <name> - settle all their open grudges")
