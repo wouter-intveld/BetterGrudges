@@ -535,29 +535,22 @@ local function ClassColour(class)
     return 0, 0, 0, 0
 end
 
--- The game's round race-and-gender icon, as on character creation.
-local function RaceAtlas(p)
+-- The game's default portrait for a race and sex: the face it shows for a
+-- player it hasn't loaded yet. p.race is the race's file name ("Scourge").
+local function DefaultPortrait(p)
     if not p.race then return nil end
-    local race = p.race:lower() == "scourge" and "undead" or p.race:lower()
-    local sex = p.sex == 3 and "female" or "male"
-    for _, fmt in ipairs({ "raceicon128-%s-%s", "raceicon-%s-%s" }) do
-        local atlas = fmt:format(race, sex)
-        if C_Texture.GetAtlasInfo(atlas) then return atlas end
-    end
+    local path = ("Interface\\CharacterFrame\\TemporaryPortrait-%s-%s"):format(p.sex == 3 and "Female" or "Male", p.race)
+    if GetFileIDFromPath and not GetFileIDFromPath(path) then return nil end
+    return path
 end
 
--- A player's picture: their live portrait while they're your target (live
--- only: the game can't keep one), else the race icon, else the class icon.
-local function SetPicture(tex, p, name, live)
-    if live and UnitIsPlayer("target") and Ambiguate(GetUnitName("target", true), "none") == name then
-        SetPortraitTexture(tex, "target")
+-- A player's picture: the default portrait for their race and sex, made
+-- round as the game's portraits are, else their class icon.
+local function SetPicture(tex, p)
+    local path = DefaultPortrait(p)
+    if path then
         tex:SetTexCoord(0, 1, 0, 1)
-        tex:Show()
-        return
-    end
-    local atlas = RaceAtlas(p)
-    if atlas then
-        tex:SetAtlas(atlas)
+        if SetPortraitToTexture then SetPortraitToTexture(tex, path) else tex:SetTexture(path) end
         tex:Show()
         return
     end
@@ -767,7 +760,7 @@ RefreshBook = function()
         row.player = g.name
         row.name:SetText(g.name)
         row.class:SetColorTexture(ClassColour(book[g.name].class))
-        SetPicture(row.picture, book[g.name], g.name, false)
+        SetPicture(row.picture, book[g.name])
         row.tally:SetText(g.summary)
         row.selected:SetShown(g.name == selected)
         row:Show()
@@ -787,7 +780,7 @@ RefreshBook = function()
     end
     ui.forgive:SetEnabled((Counts(p)) > 0)
     ui.name:SetText(selected)
-    SetPicture(ui.picture, p, selected, true)
+    SetPicture(ui.picture, p)
     local class = p.class and (p.class:sub(1, 1) .. p.class:sub(2):lower() .. ", ") or ""
     ui.sub:SetText(class .. (Summary(p, INK) or (#p.entries > 0 and "notes only" or "empty page")) .. (p.seen and (", last met " .. date("%Y-%m-%d", p.seen)) or ""))
 
@@ -845,7 +838,6 @@ local handlers = {
     UNIT_AURA = OnPlayerAura,
     CHAT_MSG_COMBAT_HONOR_GAIN = OnHonorGain,
     PLAYER_DEAD = OnPlayerDead,
-    PLAYER_TARGET_CHANGED = function() RefreshBook() end, -- the live portrait follows your target
     CHAT_MSG_SYSTEM = OnSystemMessage,
     RESURRECT_REQUEST = OnResurrectRequest,
 }
