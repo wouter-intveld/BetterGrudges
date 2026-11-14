@@ -544,8 +544,9 @@ local function PageLine(i)
 end
 
 local function CreateBook()
-    local f = CreateFrame("Frame", "BetterGrudgesBook", UIParent, "BasicFrameTemplateWithInset")
-    f:SetSize(LIST_W + PAGE_W + 50, 440)
+    -- The game's own window frame, as the spellbook uses: bronze on this client.
+    local f = CreateFrame("Frame", "BetterGrudgesBook", UIParent, "PortraitFrameTemplate")
+    f:SetSize(LIST_W + PAGE_W + 50, 460)
     f:SetPoint("CENTER")
     f:SetFrameStrata("DIALOG")
     f:SetToplevel(true)
@@ -557,17 +558,13 @@ local function CreateBook()
     f:SetScript("OnDragStop", f.StopMovingOrSizing)
     f:Hide()
     tinsert(UISpecialFrames, "BetterGrudgesBook") -- Escape closes it
-    local title = f.TitleText or f.title
-    if not title then
-        title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        title:SetPoint("TOP", 0, -6)
-    end
-    title:SetText(TITLE .. ": the book")
+    if f.SetTitle then f:SetTitle(TITLE .. ": the book") end
+    if f.SetPortraitToAsset then f:SetPortraitToAsset("Interface\\Icons\\INV_Misc_Book_09") end
     ui = { frame = f, rows = {}, lines = {}, buttons = {} }
 
     local search = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
     search:SetSize(LIST_W - 52, 20)
-    search:SetPoint("TOPLEFT", 22, -32)
+    search:SetPoint("TOPLEFT", 22, -66) -- below the portrait
     search:SetAutoFocus(false)
     search:SetScript("OnTextChanged", function() RefreshBook() end)
     search:SetScript("OnEscapePressed", search.ClearFocus)
@@ -592,7 +589,7 @@ local function CreateBook()
 
     local list
     list, ui.listContent = Scroller(f, LIST_W)
-    list:SetPoint("TOPLEFT", 14, -58)
+    list:SetPoint("TOPLEFT", 14, -92)
     list:SetPoint("BOTTOMLEFT", 14, 12)
     list:SetWidth(LIST_W)
     ui.empty = f:CreateFontString(nil, "OVERLAY", "GameFontDisable")
