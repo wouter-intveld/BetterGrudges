@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+  "runtime.version": "Lua 5.1",
+  "workspace.library": [
+    "~/.local/share/wow-api/Annotations/Core"
+  ],
+  "workspace.checkThirdParty": false,
+  "diagnostics.globals": [
+    "BetterGrudgesDB",
+    "SLASH_BETTERGRUDGES1",
+    "SLASH_BETTERGRUDGES2",
+    "SlashCmdList",
+    "TooltipDataProcessor",
+    "DUEL_WINNER_KNOCKOUT",
+    "DUEL_WINNER_RETREAT",
+    "CombatLogGetCurrentEventInfo",
+    "GetUnitName"
+  ]
+}

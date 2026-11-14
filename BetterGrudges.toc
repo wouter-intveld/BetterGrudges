@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: |cffcda552Better|rGrudges
+## Category: Chat & Communication
+## Notes: A friendly book of grudges: who killed you, who bested you in a duel, who rezzed and buffed you.
+## Author: deface
+## Version: @project-version@
+## SavedVariables: BetterGrudgesDB
+
+BetterGrudges.lua
