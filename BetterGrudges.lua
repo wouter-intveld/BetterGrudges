@@ -24,6 +24,7 @@ local db
 local myName -- set at login
 local lastRez = {} -- name -> time, so a recast isn't noted twice
 local RefreshBook -- the book window, defined below; redrawn whenever the book changes
+local UpdateMarks -- marks on unit frames and nameplates, defined below
 
 local function Print(msg)
     print(TITLE .. ": " .. msg)
@@ -352,6 +353,11 @@ SlashCmdList.BETTERGRUDGES = function(msg)
         print("  /grudge remove <name> - tear their page out of the book")
         print("  /grudge quiet - don't print new entries")
         print("  /grudge minimap - hide or show the minimap button")
+        print("  /grudge marks - hide or show the marks on unit frames and nameplates")
+    elseif cmd == "marks" then
+        db.hideMarks = not db.hideMarks or nil
+        UpdateMarks()
+        Print("marks on unit frames and nameplates " .. (db.hideMarks and "hidden" or "shown"))
     elseif cmd == "minimap" then
         db.minimap.hide = not db.minimap.hide
         local icon = LibStub("LibDBIcon-1.0")
@@ -520,6 +526,89 @@ if Menu and Menu.ModifyMenu then
         Menu.ModifyMenu(tag, AddMenuEntry)
     end
 end
+
+---------------------------------------------------------------------------
+-- Marks: a small book on the target and focus frames and on nameplates of
+-- players in the book, red for an open grudge, green for a kindness. Our own
+-- frames, only anchored to the unit frames, so any unit frame addon works.
+---------------------------------------------------------------------------
+local UNIT_FRAMES = { -- first visible wins: ElvUI, Shadowed, PitBull, EllesmereUI, Blizzard
+    target = { "ElvUF_Target", "SUFUnittarget", "PitBull4_Frames_Target", "EllesmereUIUnitFrames_Target", "TargetFrame" },
+    focus = { "ElvUF_Focus", "SUFUnitfocus", "PitBull4_Frames_Focus", "EllesmereUIUnitFrames_Focus", "FocusFrame" },
+}
+local MARK_TEXTURE = { -- gold-rimmed medallions: crossed swords on red, a heart on green
+    grudge = "Interface\\AddOns\\BetterGrudges\\mark-grudge",
+    kind = "Interface\\AddOns\\BetterGrudges\\mark-kind",
+}
+local marks = {} -- unit token -> mark frame
+
+local function MarkFrame(unit)
+    local m = marks[unit]
+    if m then return m end
+    m = CreateFrame("Frame", nil, UIParent)
+    m:SetSize(22, 22)
+    m:SetFrameStrata("MEDIUM")
+    m:EnableMouse(false) -- never in the way of clicking the unit
+    m.icon = m:CreateTexture(nil, "ARTWORK")
+    m.icon:SetAllPoints()
+    m:Hide()
+    marks[unit] = m
+    return m
+end
+
+local function MarkState(unit)
+    if db.hideMarks or not (UnitExists(unit) and UnitIsPlayer(unit)) or UnitIsUnit(unit, "player") then return nil end
+    local p = Book()[Ambiguate(GetUnitName(unit, true), "none")]
+    if not p then return nil end
+    local open, _, kindness = Counts(p)
+    if open > 0 then return "grudge" end
+    if kindness > 0 then return "kind" end
+end
+
+local function ShowMark(unit, state, anchor, point, relPoint)
+    local m = MarkFrame(unit)
+    if not (state and anchor) then
+        m:Hide()
+        return
+    end
+    m.icon:SetTexture(MARK_TEXTURE[state])
+    m:ClearAllPoints()
+    m:SetPoint(point, anchor, relPoint)
+    m:Show()
+end
+
+local function UpdateFrameMark(unit)
+    local frame
+    for _, name in ipairs(UNIT_FRAMES[unit]) do
+        local f = _G[name]
+        if f and f:IsVisible() then
+            frame = f
+            break
+        end
+    end
+    -- On Blizzard's frame (as BetterBlizzFrames styles it) the mark sits on the portrait.
+    local portrait = frame and frame.TargetFrameContainer and frame.TargetFrameContainer.Portrait
+    ShowMark(unit, MarkState(unit), portrait or frame, "CENTER", "TOPLEFT")
+end
+
+-- Beside the nameplate. Not in instances: enemy nameplates are off limits there.
+local function UpdatePlateMark(unit)
+    local plate = not IsInInstance() and C_NamePlate.GetNamePlateForUnit(unit)
+    ShowMark(unit, plate and MarkState(unit), plate, "RIGHT", "LEFT")
+end
+
+UpdateMarks = function()
+    UpdateFrameMark("target")
+    UpdateFrameMark("focus")
+    for unit, m in pairs(marks) do
+        if unit:find("^nameplate") then
+            if UnitExists(unit) then UpdatePlateMark(unit) else m:Hide() end
+        end
+    end
+end
+
+-- Unit frames show in the same event that changes them: look a frame later.
+local function UpdateMarksSoon() C_Timer.After(0, UpdateMarks) end
 
 ---------------------------------------------------------------------------
 -- The book window: players on the left, the chosen page on the right.
@@ -749,6 +838,7 @@ local function CreateBook()
 end
 
 RefreshBook = function()
+    if db then UpdateMarks() end -- the book changed, so a mark may have too
     if not (ui and ui.frame:IsShown()) then return end
     local book = Book()
     local list = SortedPages(ui.search:GetText():lower(), INK)
@@ -838,6 +928,11 @@ local handlers = {
     UNIT_AURA = OnPlayerAura,
     CHAT_MSG_COMBAT_HONOR_GAIN = OnHonorGain,
     PLAYER_DEAD = OnPlayerDead,
+    PLAYER_TARGET_CHANGED = UpdateMarksSoon,
+    PLAYER_FOCUS_CHANGED = UpdateMarksSoon,
+    PLAYER_ENTERING_WORLD = UpdateMarksSoon,
+    NAME_PLATE_UNIT_ADDED = function(unit) UpdatePlateMark(unit) end,
+    NAME_PLATE_UNIT_REMOVED = function(unit) if marks[unit] then marks[unit]:Hide() end end,
     CHAT_MSG_SYSTEM = OnSystemMessage,
     RESURRECT_REQUEST = OnResurrectRequest,
 }

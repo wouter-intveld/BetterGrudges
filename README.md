@@ -18,6 +18,16 @@ helped, and reminds you when you see them again.
 Hover over a player and the tooltip tells you what you have against them, and
 what you owe them.
 
+## Marks
+
+Players in the book get a small medallion on your target and focus frames and
+beside their nameplate: crossed swords on red for an open grudge, a heart on
+green for a kindness. It works with Blizzard's frames (also as
+BetterBlizzFrames styles them), ElvUI, Shadowed Unit Frames, PitBull and
+EllesmereUI, and with any nameplate addon. Nameplate marks show in the open
+world only, since the game keeps addons away from enemy nameplates in
+instances.
+
 ## The book
 
 Open it with `/grudge` or the minimap button.
@@ -48,6 +58,7 @@ tagged my mob, ganked me, left the group. Or write your own.
 | `/grudge list` | List the book in chat |
 | `/grudge quiet` | Stop printing new entries to chat |
 | `/grudge minimap` | Hide or show the minimap button |
+| `/grudge marks` | Hide or show the marks on unit frames and nameplates |
 
 The book is shared by all your characters, one book per realm.
 
