@@ -118,8 +118,9 @@ end
 local function SortedPages(filter)
     local list = {}
     for name, p in pairs(Book()) do
-        if #p.entries > 0 and (filter == "" or name:lower():find(filter, 1, true)) then
-            list[#list + 1] = { name = name, open = (Counts(p)), seen = p.seen or 0, summary = Summary(p) or "notes" }
+        if filter == "" or name:lower():find(filter, 1, true) then
+            local summary = Summary(p) or (#p.entries > 0 and "notes" or "empty page")
+            list[#list + 1] = { name = name, open = (Counts(p)), seen = p.seen or 0, summary = summary }
         end
     end
     table.sort(list, function(a, b)
@@ -288,7 +289,8 @@ local function FindName(arg)
     for name in pairs(Book()) do
         if name:lower() == lower then return name end
     end
-    return arg:sub(1, 1):upper() .. arg:sub(2):lower()
+    -- A new name: each word capitalised, as the game writes them.
+    return (arg:lower():gsub("(%a)([%w']*)", function(a, b) return a:upper() .. b end))
 end
 
 -- "<name> <text>" split into name and text. Names on this client can have a
@@ -392,6 +394,42 @@ StaticPopupDialogs.BETTERGRUDGES_NOTE = {
     EditBoxOnEnterPressed = function(self)
         local popup = self:GetParent()
         StaticPopupDialogs.BETTERGRUDGES_NOTE.OnAccept(popup, popup.data)
+        popup:Hide()
+    end,
+    EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
+}
+
+-- A new page, from the book's Add button. Your target's name is filled in.
+StaticPopupDialogs.BETTERGRUDGES_NEW = {
+    text = "Add a player to the book:",
+    button1 = ACCEPT,
+    button2 = CANCEL,
+    hasEditBox = true,
+    maxLetters = 60,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    OnShow = function(self)
+        local box = self.EditBox or self.editBox
+        if UnitIsPlayer("target") and not UnitIsUnit("target", "player") then
+            box:SetText(Ambiguate(GetUnitName("target", true), "none"))
+            box:HighlightText()
+        end
+    end,
+    OnAccept = function(self)
+        local text = (self.EditBox or self.editBox):GetText():match("^%s*(.-)%s*$")
+        if text == "" then return end
+        local name, guid = FindName(text)
+        if not name then return end
+        if not guid and UnitIsPlayer("target") and Ambiguate(GetUnitName("target", true), "none") == name then
+            guid = UnitGUID("target")
+        end
+        Record(name, guid)
+        ShowBook(name)
+    end,
+    EditBoxOnEnterPressed = function(self)
+        local popup = self:GetParent()
+        StaticPopupDialogs.BETTERGRUDGES_NEW.OnAccept(popup)
         popup:Hide()
     end,
     EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
@@ -528,7 +566,7 @@ local function CreateBook()
     ui = { frame = f, rows = {}, lines = {}, buttons = {} }
 
     local search = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
-    search:SetSize(LIST_W - 10, 20)
+    search:SetSize(LIST_W - 52, 20)
     search:SetPoint("TOPLEFT", 22, -32)
     search:SetAutoFocus(false)
     search:SetScript("OnTextChanged", function() RefreshBook() end)
@@ -539,6 +577,18 @@ local function CreateBook()
     search:SetScript("OnEditFocusGained", function() hint:Hide() end)
     search:SetScript("OnEditFocusLost", function(self) hint:SetShown(self:GetText() == "") end)
     ui.search = search
+
+    local add = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    add:SetSize(44, 22)
+    add:SetPoint("LEFT", search, "RIGHT", 6, 0)
+    add:SetText("Add")
+    add:SetScript("OnClick", function() StaticPopup_Show("BETTERGRUDGES_NEW") end)
+    add:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Add a player to the book")
+        GameTooltip:Show()
+    end)
+    add:SetScript("OnLeave", GameTooltip_Hide)
 
     local list
     list, ui.listContent = Scroller(f, LIST_W)

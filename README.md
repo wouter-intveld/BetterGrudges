@@ -20,7 +20,8 @@ you owe them.
 ## The book
 
 `/grudge` opens the book: everyone you have met on the left, open grudges
-first, with a search box; their page on the right, newest first. Buttons below
+first, with a search box and an Add button for a new player (your target's
+name is filled in); their page on the right, newest first. Buttons below
 the page add a grudge, a kindness or a note, forgive their grudges, or tear the
 page out.
 
