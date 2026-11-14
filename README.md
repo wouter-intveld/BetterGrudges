@@ -30,6 +30,7 @@ by forgiving.
 - `/grudge <name>` shows their page in the book. `target` works as a name.
 - `/grudge <name> <text>` writes a note on their page.
 - `/grudge forgive <name>` settles all their open grudges.
+- `/grudge remove <name>` tears their page out of the book.
 - `/grudge quiet` stops printing new entries to chat.
 
 The book is shared by all your characters, with one book per realm.

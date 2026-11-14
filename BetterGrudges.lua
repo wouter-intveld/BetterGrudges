@@ -246,6 +246,23 @@ local function FindName(arg)
     return arg:sub(1, 1):upper() .. arg:sub(2):lower()
 end
 
+-- "<name> <text>" split into name and text. Names on this client can have a
+-- space, so the longest run of leading words that is a name in the book wins.
+local function SplitName(msg)
+    local words = {}
+    for word in msg:gmatch("%S+") do words[#words + 1] = word end
+    if words[1]:lower() == "target" then
+        local name, guid = FindName("target")
+        return name, guid, table.concat(words, " ", 2)
+    end
+    local book = Book()
+    for i = #words, 2, -1 do
+        local name = FindName(table.concat(words, " ", 1, i))
+        if book[name] then return name, nil, table.concat(words, " ", i + 1) end
+    end
+    return FindName(words[1]), nil, table.concat(words, " ", 2)
+end
+
 local function PrintLedger(name)
     local p = Book()[name]
     if not p or #p.entries == 0 then
@@ -297,10 +314,19 @@ SlashCmdList.BETTERGRUDGES = function(msg)
         print("  /grudge <name> - their page in the book (\"target\" works as a name)")
         print("  /grudge <name> <text> - write a note on their page")
         print("  /grudge forgive <name> - settle all their open grudges")
+        print("  /grudge remove <name> - tear their page out of the book")
         print("  /grudge quiet - don't print new entries")
     elseif cmd == "quiet" then
         db.quiet = not db.quiet
         Print("new entries " .. (db.quiet and "muted" or "printed"))
+    elseif cmd == "remove" then
+        local name = rest ~= "" and FindName(rest)
+        if not (name and Book()[name]) then
+            Print("usage: /grudge remove <name>")
+            return
+        end
+        Book()[name] = nil
+        Print(name .. "'s page is torn out of the book.")
     elseif cmd == "forgive" then
         local name = rest ~= "" and FindName(rest)
         local p = name and Book()[name]
@@ -317,7 +343,8 @@ SlashCmdList.BETTERGRUDGES = function(msg)
         Print(n > 0 and ("%s: %d grudge%s forgiven. Generous."):format(name, n, n == 1 and "" or "s")
             or (name .. " has no open grudges."))
     else
-        local name, guid = FindName(first)
+        local name, guid
+        name, guid, rest = SplitName(msg)
         if not name then
             Print("your target isn't a player.")
         elseif rest == "" then
