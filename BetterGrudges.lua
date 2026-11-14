@@ -7,7 +7,8 @@ local DEFAULTS = {
     minimap = {},  -- LibDBIcon's position and hide flag
     marksFrames = true,   -- marks on the target and focus frames
     marksPlates = true,   -- marks beside nameplates
-    marksKindness = true, -- kindnesses get a mark too, not only open grudges
+    marksGrudge = true,   -- open grudges get a mark
+    marksKindness = true, -- kindnesses get a mark
     markSize = 22,
 }
 
@@ -570,7 +571,8 @@ local function MarkState(unit)
     local p = Book()[Ambiguate(GetUnitName(unit, true), "none")]
     if not p then return nil end
     local open, _, kindness = Counts(p)
-    if open > 0 then return "grudge" end
+    -- A grudge outranks a kindness; with grudge marks off, a kindness still shows.
+    if open > 0 and db.marksGrudge then return "grudge" end
     if kindness > 0 and db.marksKindness then return "kind" end
 end
 
@@ -968,7 +970,8 @@ local function RegisterSettings()
     Header("Marks")
     Checkbox("marksFrames", "On target and focus frames", "A medallion on the target and focus frames of players in the book.", UpdateMarks)
     Checkbox("marksPlates", "Beside nameplates", "A medallion beside the nameplates of players in the book. Open world only: the game keeps addons away from enemy nameplates in instances.", UpdateMarks)
-    Checkbox("marksKindness", "Mark kindnesses too", "A heart on green for players you owe a kindness. Off: only open grudges get a mark.", UpdateMarks)
+    Checkbox("marksGrudge", "Mark open grudges", "Crossed swords on red for players you hold an open grudge against.", UpdateMarks)
+    Checkbox("marksKindness", "Mark kindnesses", "A heart on green for players you owe a kindness.", UpdateMarks)
     local size = Proxy("markSize", Settings.VarType.Number, "Mark size", DEFAULTS.markSize,
         function() return db.markSize end,
         function(value)

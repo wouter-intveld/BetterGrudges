@@ -29,7 +29,8 @@ world only, since the game keeps addons away from enemy nameplates in
 instances.
 
 Under Options > AddOns > BetterGrudges (or right-click the minimap button) you
-choose where marks show, whether kindnesses get one, and their size.
+choose where marks show, whether grudges and kindnesses each get one, and
+their size.
 
 ## The book
 
