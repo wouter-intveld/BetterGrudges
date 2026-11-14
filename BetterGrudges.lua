@@ -138,8 +138,9 @@ local function EntryLine(e)
     local line = date("%Y-%m-%d", e.t) .. "  " .. Describe(e)
     if e.done then return "|c" .. INK.settled .. line .. " [settled]|r" end
     local def = KIND[e.k]
-    local tag = def.grudge and ("|c" .. INK.grudge .. "Grudge:|r ")
-        or def.kind and ("|c" .. INK.kind .. "Kindness:|r ") or ""
+    -- The same medallions as the marks on unit frames, inline.
+    local tag = def.grudge and "|TInterface\\AddOns\\BetterGrudges\\mark-grudge:16:16|t "
+        or def.kind and "|TInterface\\AddOns\\BetterGrudges\\mark-kind:16:16|t " or ""
     return ("|c%s%s|r  %s|c%s%s|r"):format(INK.plain, date("%Y-%m-%d", e.t), tag, INK.plain, Describe(e))
 end
 
