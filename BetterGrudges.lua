@@ -144,19 +144,35 @@ local function EntryLine(e)
     return ("|c%s%s|r  %s|c%s%s|r"):format(INK.plain, date("%Y-%m-%d", e.t), tag, INK.plain, Describe(e))
 end
 
--- Everyone in the book whose name contains filter: open grudges first, then
--- the most recently met.
-local function SortedPages(filter, colours, short)
+-- The book list's filter and order, chosen in its menu (db.listShow, db.listSort).
+local LIST_SHOW = {
+    { key = "all", text = "Everyone" },
+    { key = "grudge", text = "Open grudges" },
+    { key = "kind", text = "Kindnesses" },
+}
+local LIST_SORT = {
+    { key = "grudges", text = "Open grudges first" },
+    { key = "seen", text = "Last met" },
+    { key = "name", text = "Name" },
+}
+
+-- Everyone in the book whose name contains filter and who passes show, in
+-- sort order: open grudges first (then the most recently met), last met, or name.
+local function SortedPages(filter, colours, short, show, sort)
     local list = {}
     for name, p in pairs(Book()) do
-        if filter == "" or name:lower():find(filter, 1, true) then
+        local open, _, kindness = Counts(p)
+        if (filter == "" or name:lower():find(filter, 1, true))
+            and (show ~= "grudge" or open > 0) and (show ~= "kind" or kindness > 0) then
             local summary = Summary(p, colours, short) or (#p.entries > 0 and "notes" or "empty page")
-            list[#list + 1] = { name = name, open = (Counts(p)), seen = p.seen or 0, summary = summary }
+            list[#list + 1] = { name = name, open = open, seen = p.seen or 0, summary = summary }
         end
     end
     table.sort(list, function(a, b)
-        if a.open ~= b.open then return a.open > b.open end
-        return a.seen > b.seen
+        if sort == "name" then return a.name < b.name end
+        if sort ~= "seen" and a.open ~= b.open then return a.open > b.open end
+        if a.seen ~= b.seen then return a.seen > b.seen end
+        return a.name < b.name
     end)
     return list
 end
@@ -796,7 +812,7 @@ local function CreateBook()
     ui = { frame = f, rows = {}, lines = {}, buttons = {} }
 
     local search = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
-    search:SetSize(LIST_W - 52, 20)
+    search:SetSize(LIST_W - 76, 20)
     search:SetPoint("TOPLEFT", 22, -66) -- below the portrait
     search:SetAutoFocus(false)
     search:SetScript("OnTextChanged", function() RefreshBook() end)
@@ -808,9 +824,38 @@ local function CreateBook()
     search:SetScript("OnEditFocusLost", function(self) hint:SetShown(self:GetText() == "") end)
     ui.search = search
 
+    -- Filter and sort: one menu, radio choices in two groups.
+    local order = CreateFrame("Button", nil, f)
+    order:SetSize(18, 18)
+    order:SetPoint("LEFT", search, "RIGHT", 4, 0)
+    order:SetNormalAtlas("Map-Filter-Button")
+    order:SetHighlightAtlas("Map-Filter-Button", "ADD")
+    order:SetScript("OnClick", function(self)
+        MenuUtil.CreateContextMenu(self, function(_, root)
+            local function Group(title, choices, key, default)
+                root:CreateTitle(title)
+                for _, c in ipairs(choices) do
+                    root:CreateRadio(c.text, function() return (db[key] or default) == c.key end, function()
+                        db[key] = c.key
+                        RefreshBook()
+                    end)
+                end
+            end
+            Group("Show", LIST_SHOW, "listShow", "all")
+            root:CreateDivider()
+            Group("Sort by", LIST_SORT, "listSort", "grudges")
+        end)
+    end)
+    order:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Filter and sort the list")
+        GameTooltip:Show()
+    end)
+    order:SetScript("OnLeave", GameTooltip_Hide)
+
     local add = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     add:SetSize(44, 22)
-    add:SetPoint("LEFT", search, "RIGHT", 6, 0)
+    add:SetPoint("LEFT", order, "RIGHT", 4, 0)
     add:SetText("Add")
     add:SetScript("OnClick", function() StaticPopup_Show("BETTERGRUDGES_NEW") end)
     add:SetScript("OnEnter", function(self)
@@ -883,7 +928,7 @@ RefreshBook = function()
     if db then UpdateMarks() end -- the book changed, so a mark may have too
     if not (ui and ui.frame:IsShown()) then return end
     local book = Book()
-    local list = SortedPages(ui.search:GetText():lower(), INK, true)
+    local list = SortedPages(ui.search:GetText():lower(), INK, true, db.listShow or "all", db.listSort or "grudges")
     if selected and not book[selected] then selected = nil end
     if not selected and list[1] then selected = list[1].name end
 
